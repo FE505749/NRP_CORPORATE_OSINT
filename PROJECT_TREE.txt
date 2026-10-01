@@ -1,0 +1,54 @@
+NRP_CORPORATE_OSINT_V4/
+├── dashboard.py                 # Interfaz Streamlit minimalista
+├── cli.py                       # Ejecución por terminal para lotes grandes
+├── corporate_osint.sqlite       # Se crea localmente (ignorado por Git)
+├── tokens.example.env           # Plantilla de credenciales
+├── requirements.txt
+├── constraints.txt              # Versiones verificadas multiplataforma
+├── pyproject.toml
+├── setup_windows.bat
+├── run_dashboard_windows.bat
+├── run_cli_windows.bat
+├── setup_mac.sh
+├── setup_mac.command
+├── run_mac.command
+├── run_cli_mac.command
+├── scripts/
+│   ├── setup_env.py             # Instalador compartido macOS/Windows
+│   └── run_dashboard.py         # Lanzador portable y selección de puerto
+├── ejemplo_base_objetivo.csv
+├── ejemplo_historico.csv
+├── data/
+│   ├── uploads/
+│   ├── exports/
+│   └── cache/
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── SOURCES.md
+├── nrp_osint/
+│   ├── config.py
+│   ├── paths.py
+│   ├── crossmatch.py
+│   ├── db.py
+│   ├── normalize.py
+│   ├── io_stream.py
+│   ├── historical.py
+│   ├── local_reuse.py
+│   ├── employer.py
+│   ├── emailintel.py
+│   ├── domain.py
+│   ├── search.py
+│   ├── network_governor.py
+│   ├── net.py
+│   ├── webextract.py
+│   ├── pipeline.py
+│   ├── exporter.py
+│   └── sources/
+│       ├── denue.py
+│       ├── clearbit.py
+│       ├── wikidata.py
+│       └── commoncrawl.py
+└── tests/
+    ├── test_core.py
+    ├── test_crossmatch.py
+    └── test_paths.py

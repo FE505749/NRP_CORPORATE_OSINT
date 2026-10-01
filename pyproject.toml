@@ -1,0 +1,9 @@
+[project]
+name = "nrp-corporate-osint"
+version = "4.0.0"
+description = "Local employer-first OSINT engine for corporate domain and email pattern resolution"
+requires-python = ">=3.11,<3.14"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
