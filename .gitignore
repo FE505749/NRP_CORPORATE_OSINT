@@ -18,3 +18,4 @@ logs/*
 !logs/.gitkeep
 .DS_Store
 *.bak
+data/respaldo_*/

@@ -13,6 +13,7 @@ from nrp_osint import denue_local
 
 app=typer.Typer(help='NRP Corporate OSINT V4')
 def ctx():load_tokens();s=Settings.from_env();return s,DB(s.db_path)
+def settings_only():load_tokens();return Settings.from_env()
 @app.command()
 def init():s,db=ctx();print('[green]Base preparada[/green]',s.db_path)
 @app.command('ingest-main')
@@ -29,13 +30,13 @@ def run(max_jobs:int=0,batch:int=25,denue_local_only:bool=typer.Option(False,'--
 @app.command('denue-update')
 def denue_update(solo_carga:bool=typer.Option(False,help='No descargar; solo reconstruir desde los ZIP existentes')):
     """Descarga la descarga masiva de DENUE y construye data/denue/denue.sqlite."""
-    s,_=ctx();base=Path(s.denue_local_path).parent
+    s=settings_only();base=Path(s.denue_local_path).parent
     if solo_carga:print(denue_local.build(base,lambda i,n,name,total:print(f'carga {i}/{n} {name} - {total:,}')))
     else:print(denue_local.update(base,lambda fase,i,n,name:print(f'{fase} {i}/{n} {name}')))
 @app.command('denue-buscar')
 def denue_buscar(nombre:str,limite:int=5):
     """Prueba rapida contra la copia local de DENUE."""
-    s,_=ctx()
+    s=settings_only()
     for h in denue_local.DenueLocalSource(s.denue_local_path).search(nombre,limite):
         print(f"{h['score']:.2f} | {h['company']} | {h['trade_name']} | {h['domain'] or '-'} | {h['email'] or '-'} | {h['location']}")
 @app.command()

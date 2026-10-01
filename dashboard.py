@@ -312,13 +312,21 @@ elif page.endswith("Buscar"):
     )
 
     disponible = counts(db)
-    if not disponible["historicos"]:
+    base_inegi = denue_local.info(Path(settings.denue_local_path).parent)
+    if base_inegi:
         st.markdown(
-            '<div class="callout warning"><b>No hay histórico cargado.</b> '
-            'Revisa la sección <b>Histórico cargado</b> para incorporarlo.</div>',
+            f'<div class="callout"><b>INEGI DENUE precargado:</b> {int(base_inegi["establecimientos"]):,} establecimientos '
+            f'de los 32 estados · {int(base_inegi["con_sitio_web"]):,} con sitio web. '
+            'Tu base se busca ahí al subirla, sin Internet.</div>',
             unsafe_allow_html=True,
         )
-    else:
+    elif not disponible["historicos"]:
+        st.markdown(
+            '<div class="callout warning"><b>No hay DENUE local ni histórico cargado.</b> '
+            'Descarga DENUE en <b>Fuentes</b>.</div>',
+            unsafe_allow_html=True,
+        )
+    if disponible["historicos"]:
         st.markdown(
             f'<div class="callout"><b>Histórico disponible:</b> {disponible["historicos"]:,} registros · '
             f'{disponible["empresas_unicas"]:,} empresas. Se buscará por '
