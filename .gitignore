@@ -11,6 +11,8 @@ data/uploads/*
 data/exports/*
 data/cache/*
 data/denue/
+data/tukan/
+Tukan.xlsx
 !data/uploads/.gitkeep
 !data/exports/.gitkeep
 !data/cache/.gitkeep

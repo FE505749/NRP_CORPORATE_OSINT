@@ -1,0 +1,68 @@
+/*
+ * Barra superior: marca, sección actual, navegación, tema y estado de la base.
+ * Patrón de skill-diagramas-visio: azul en AMBOS temas, así que todo lo de acá
+ * consume los tokens `--*-sidebar*` y no los de superficie.
+ */
+
+.topbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+  background: var(--bg-sidebar); border-bottom: 1px solid var(--border-sidebar);
+  padding: 10px 16px;
+}
+.marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.marca-icono {
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 7px; background: var(--papel); box-shadow: var(--shadow-sm);
+  overflow: hidden; flex-shrink: 0;
+}
+.marca-icono img { width: 18px; height: 18px; object-fit: contain; display: block; }
+.divisor-barra { width: 1px; height: 26px; background: var(--border-sidebar); flex-shrink: 0; }
+
+.bloque-titulo { min-width: 0; flex: 0 0 auto; }
+.eyebrow-barra {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-sidebar-subtle); line-height: 1.2;
+}
+.titulo-barra { color: var(--text-sidebar); font-size: var(--text-sm); font-weight: 700; white-space: nowrap; }
+
+/* Navegación: botones de barra; el de la sección actual va en dorado suave,
+   como el tema seleccionado en el proyecto original. */
+.nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.topbar button.barra {
+  height: 30px; padding: 0 12px; font-size: var(--text-xs); font-weight: 600;
+  border-radius: var(--radius-md); cursor: pointer;
+  background: transparent; color: var(--text-sidebar-muted); border: 1px solid transparent;
+}
+.topbar button.barra:hover { background: var(--bg-sidebar-hover); color: var(--text-sidebar); }
+.topbar button.barra[aria-current="page"] {
+  background: var(--bg-sidebar-active); color: var(--accent); border-color: var(--border-sidebar);
+}
+
+.topbar-fin { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--radius-md); padding: 3px 9px;
+  font-size: var(--text-xs); font-weight: 600; white-space: nowrap;
+  background: var(--bg-sidebar-hover); color: var(--text-sidebar-muted);
+  border: 1px solid var(--border-sidebar);
+}
+.pill b { color: var(--text-sidebar); font-variant-numeric: tabular-nums; }
+.punto { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.punto.apagado { background: var(--text-sidebar-subtle); }
+
+.tema { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border-sidebar); border-radius: var(--radius-full); padding: 2px; }
+.tema button {
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: var(--radius-full); background: transparent; cursor: pointer;
+  color: var(--text-sidebar-muted);
+  transition: color var(--duration-base) var(--easing-out), background var(--duration-base) var(--easing-out);
+}
+.tema button:hover { color: var(--text-sidebar); }
+.tema button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.tema svg { width: 13px; height: 13px; }
+
+@media (max-width: 1100px) {
+  .topbar { flex-wrap: wrap; }
+  .topbar-fin .pill.opcional { display: none; }
+}

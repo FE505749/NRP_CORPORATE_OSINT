@@ -1,5 +1,6 @@
 NRP_CORPORATE_OSINT_V4/
-├── dashboard.py                 # Interfaz Streamlit minimalista
+├── api/main.py                  # Servidor local FastAPI (página + /api)
+├── front/                       # Interfaz: index.html, styles/, js/, img/, fonts/
 ├── cli.py                       # Ejecución por terminal para lotes grandes
 ├── corporate_osint.sqlite       # Se crea localmente (ignorado por Git)
 ├── tokens.example.env           # Plantilla de credenciales

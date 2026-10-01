@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NRP Intelligence</title>
+
+<link rel="icon" href="/front/img/marca.png">
+<link rel="stylesheet" href="/front/styles/fonts.css">
+<link rel="stylesheet" href="/front/styles/tokens.css">
+<link rel="stylesheet" href="/front/styles/app.css?v=20261001">
+
+<script>
+  // Antes del primer pintado, para que el tema claro no parpadee en navy.
+  try {
+    var t = localStorage.getItem("tema-nrp");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch (e) { /* sin almacenamiento: queda el oscuro por defecto */ }
+</script>
+<script type="module" src="/front/js/app.js?v=20261001"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="marca">
+    <span class="marca-icono" aria-hidden="true">
+      <img alt="" src="/front/img/marca.png" width="18" height="18">
+    </span>
+  </div>
+  <div class="divisor-barra"></div>
+  <div class="bloque-titulo">
+    <div class="eyebrow-barra">NRP Intelligence</div>
+    <div class="titulo-barra" id="titulo-barra">Buscar</div>
+  </div>
+  <div class="divisor-barra"></div>
+
+  <nav class="nav" aria-label="Secciones">
+    <button class="barra" type="button" data-ir="buscar">Buscar</button>
+    <button class="barra" type="button" data-ir="resumen">Resumen</button>
+    <button class="barra" type="button" data-ir="resultados">Resultados</button>
+    <button class="barra" type="button" data-ir="historico">Histórico</button>
+    <button class="barra" type="button" data-ir="fuentes">Fuentes</button>
+    <button class="barra" type="button" data-ir="auditoria">Auditoría</button>
+  </nav>
+
+  <div class="topbar-fin">
+    <span class="pill opcional" title="DENUE y Tukan se consultan en este equipo"><span class="punto" id="punto-local"></span>Búsqueda local</span>
+    <span class="pill opcional"><b id="pill-personas">0</b> personas · <b id="pill-correos">0</b> con correo</span>
+    <div class="tema" role="group" aria-label="Tema">
+      <button type="button" id="tema-claro" aria-label="Tema claro" title="Claro" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>
+        </svg>
+      </button>
+      <button type="button" id="tema-oscuro" aria-label="Tema oscuro" title="Oscuro" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="cuerpo">
+
+  <!-- ============ IZQUIERDA: fuentes locales y lo guardado ============ -->
+  <aside class="panel izq">
+    <div class="seccion">
+      <span class="eyebrow">Fuentes locales</span>
+      <div>
+        <div class="info-fila"><span class="info-et">INEGI DENUE</span><span class="info-val" id="lado-denue">—</span></div>
+        <div class="info-fila"><span class="info-et">Tukan</span><span class="info-val" id="lado-tukan">—</span></div>
+        <div class="info-fila"><span class="info-et">Tukan activos</span><span class="info-val" id="lado-tukan-activos">—</span></div>
+        <div class="info-fila"><span class="info-et">Histórico</span><span class="info-val" id="lado-historico">—</span></div>
+      </div>
+      <p class="pista">Orden de búsqueda: histórico, luego INEGI DENUE y después Tukan.</p>
+    </div>
+
+    <div class="seccion">
+      <span class="eyebrow">Guardado en la base</span>
+      <div>
+        <div class="info-fila"><span class="info-et">Base objetivo</span><span class="info-val" id="lado-personas">0</span></div>
+        <div class="info-fila"><span class="info-et">Con correo</span><span class="info-val" id="lado-contactos">0</span></div>
+        <div class="info-fila"><span class="info-et">Empresas conocidas</span><span class="info-val" id="lado-empresas">0</span></div>
+        <div class="info-fila"><span class="info-et">Empleadores pendientes</span><span class="info-val" id="lado-pendientes">0</span></div>
+      </div>
+    </div>
+
+    <p class="nota-privacidad"><b>Privacidad local.</b> NSS y CURP_2 permanecen en este equipo y no forman parte de ninguna consulta externa.</p>
+  </aside>
+
+  <!-- ============ CONTENIDO ============ -->
+  <main class="contenido">
+
+    <!-- ---------------- BUSCAR ---------------- -->
+    <section class="seccion-pagina" id="sec-buscar" data-titulo="Buscar">
+      <div class="encabezado">
+        <div><span class="eyebrow">Búsqueda de contactos</span><h1>Buscar contactos</h1></div>
+        <p class="sub">Por persona o con una base completa. Se consulta el histórico, INEGI DENUE y Tukan, todo en este equipo.</p>
+      </div>
+
+      <div class="rejilla-2">
+        <form class="tarjeta" id="forma-persona" novalidate>
+          <div class="tarjeta-cabeza"><h2>Buscar una persona</h2><span class="pista">No se guarda en tu base</span></div>
+          <div class="rejilla-2">
+            <div><label for="p-primer">Primer nombre <span class="req">*</span></label><input id="p-primer" autocomplete="off"></div>
+            <div><label for="p-segundo">Segundo nombre</label><input id="p-segundo" autocomplete="off"></div>
+            <div><label for="p-paterno">Apellido paterno <span class="req">*</span></label><input id="p-paterno" autocomplete="off"></div>
+            <div><label for="p-materno">Apellido materno</label><input id="p-materno" autocomplete="off"></div>
+          </div>
+          <div><label for="p-empresa">Empresa <span class="req">*</span></label><input id="p-empresa" autocomplete="off"></div>
+          <div class="caja-error" id="persona-error"></div>
+          <button class="principal ancho" type="submit" id="p-buscar">Buscar persona</button>
+        </form>
+
+        <div class="tarjeta">
+          <div class="tarjeta-cabeza"><h2>Buscar con un Excel</h2><a href="/api/lote/plantilla" class="pista">Descargar plantilla</a></div>
+          <p class="pista" style="font-size:var(--text-sm)">Cada fila se busca igual que una persona. Columnas, en la primera fila:</p>
+          <div class="columnas-lote">
+            <code>cuenta</code><code>primer_nombre</code><code class="opc">segundo_nombre</code>
+            <code>primer_apellido</code><code class="opc">segundo_apellido</code><code>empresa</code>
+          </div>
+          <p class="pista">Las de borde punteado son opcionales. Excel (.xlsx) o CSV.</p>
+          <label class="soltar" id="soltar-lote">
+            <input type="file" id="archivo-lote" accept=".xlsx,.xlsm,.csv">
+            <b>Arrastra tu Excel aquí o haz clic para elegirlo</b>
+            <span>Se descarga un Excel con dos pestañas: Correos y Detalle.</span>
+          </label>
+          <div class="avance indefinido" id="avance-lote" hidden>
+            <div class="avance-texto" id="avance-lote-texto">Preparando…</div>
+            <div class="avance-pista"><div class="avance-relleno" id="avance-lote-relleno"></div></div>
+          </div>
+          <div class="caja-error" id="lote-error"></div>
+        </div>
+      </div>
+
+      <!-- Resultado de una persona -->
+      <div id="persona-resultado" class="seccion-pagina" style="gap:12px" hidden>
+        <div class="resultado-correo">
+          <span class="eyebrow" id="r-persona"></span>
+          <div class="correo" id="r-correo"></div>
+          <div class="tipo" id="r-tipo"></div>
+        </div>
+        <div class="kpis">
+          <div><span>Empresa encontrada</span><strong id="r-empresa">—</strong></div>
+          <div><span>Dominio del correo</span><strong id="r-dominio">—</strong><small id="r-dominio-conf"></small></div>
+          <div><span>Sitio web</span><strong id="r-web" style="font-size:var(--text-md)">—</strong></div>
+        </div>
+        <div class="alternativas" id="r-alternativas"></div>
+
+        <div class="tarjeta">
+          <h2>Cómo se construyó</h2>
+          <ol class="pasos" id="r-pasos"></ol>
+          <div id="r-reales-bloque">
+            <h3 id="r-reales-titulo" style="margin-bottom:8px"></h3>
+            <div class="kpis" id="r-desglose"></div>
+          </div>
+          <div class="veredicto" id="r-veredicto"></div>
+          <div class="tabla-caja" id="r-tabla-caja"><table class="tabla" id="r-tabla"></table></div>
+        </div>
+      </div>
+
+      <!-- Resultado del Excel -->
+      <div class="tarjeta" id="lote" hidden>
+        <div class="tarjeta-cabeza"><h2>Resultado del Excel</h2><span class="pista" id="lote-pista"></span></div>
+        <div class="kpis">
+          <div><span>Personas</span><strong id="lote-filas">0</strong></div>
+          <div><span>Con correo estimado</span><strong id="lote-con">0</strong></div>
+          <div><span>Sin correo</span><strong id="lote-sin">0</strong></div>
+        </div>
+        <div class="fila-acciones"><a class="boton principal" id="lote-descarga" href="#">Descargar Excel</a></div>
+        <div class="tabla-caja"><table class="tabla" id="tabla-lote"></table></div>
+      </div>
+    </section>
+
+    <!-- ---------------- RESUMEN ---------------- -->
+    <section class="seccion-pagina" id="sec-resumen" data-titulo="Resumen" hidden>
+      <div class="encabezado">
+        <div><span class="eyebrow">Panel operativo</span><h1>Resumen</h1></div>
+        <p class="sub">Avance de la resolución corporativa y estado de las fuentes.</p>
+      </div>
+      <div class="kpis">
+        <div><span>Personas</span><strong id="k-personas">0</strong><small>Registros en la base objetivo</small></div>
+        <div><span>Empresas</span><strong id="k-empresas">0</strong><small>Perfiles corporativos conocidos</small></div>
+        <div><span>Contactos resueltos</span><strong id="k-contactos">0</strong><small>Correos disponibles</small></div>
+        <div><span>Pendientes</span><strong id="k-pendientes">0</strong><small>Empleadores en cola</small></div>
+      </div>
+      <div class="rejilla-tarjetas">
+        <div class="tarjeta">
+          <h2>Cobertura</h2>
+          <div class="cobertura"><span>Contactos</span><div class="avance-pista"><div class="avance-relleno" id="cob-contactos"></div></div><b id="cob-contactos-v">0%</b></div>
+          <div class="cobertura"><span>Empleadores</span><div class="avance-pista"><div class="avance-relleno" id="cob-empleadores"></div></div><b id="cob-empleadores-v">0%</b></div>
+          <div class="cobertura"><span>Cuenta exacta</span><div class="avance-pista"><div class="avance-relleno" id="cob-cuenta"></div></div><b id="cob-cuenta-v">0%</b></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Salud de fuentes externas</h2>
+          <div id="resumen-salud"></div>
+        </div>
+      </div>
+      <div class="tarjeta">
+        <h2>Ruta de resolución</h2>
+        <p class="pista" style="font-size:var(--text-sm)">Cuenta exacta → NRP → empresa normalizada → INEGI DENUE → Tukan → dominio tomado de correos reales → formato de correo. Todo con copias locales.</p>
+      </div>
+    </section>
+
+    <!-- ---------------- RESULTADOS ---------------- -->
+    <section class="seccion-pagina" id="sec-resultados" data-titulo="Resultados" hidden>
+      <div class="encabezado">
+        <div><span class="eyebrow">Contactos</span><h1>Resultados</h1></div>
+        <p class="sub">Consulta, filtra y exporta la información consolidada.</p>
+      </div>
+      <div class="tarjeta">
+        <form class="fila-acciones" id="forma-resultados">
+          <input id="q-resultados" placeholder="Cuenta, NRP, empresa o correo" style="flex:1;min-width:220px">
+          <button class="secundario" type="submit">Filtrar</button>
+          <button class="principal" type="button" id="exportar">Generar exportaciones</button>
+        </form>
+        <div class="caja-aviso" id="exportar-resultado"></div>
+        <div class="tabla-caja" style="max-height:560px"><table class="tabla" id="tabla-resultados"></table></div>
+        <div class="tabla-pie" id="resultados-pie"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- HISTÓRICO ---------------- -->
+    <section class="seccion-pagina" id="sec-historico" data-titulo="Histórico" hidden>
+      <div class="encabezado">
+        <div><span class="eyebrow">Conocimiento local</span><h1>Histórico cargado</h1></div>
+        <p class="sub">Lo que el motor ya conoce y usa para cruzar. Puedes añadir más archivos.</p>
+      </div>
+      <div class="kpis">
+        <div><span>Registros históricos</span><strong id="h-registros">0</strong><small>Filas cargadas</small></div>
+        <div><span>Con correo</span><strong id="h-correo">0</strong><small>Listos para reutilizar</small></div>
+        <div><span>Empresas</span><strong id="h-empresas">0</strong><small>Perfiles conocidos</small></div>
+        <div><span>NRP conocidos</span><strong id="h-nrp">0</strong><small>Registros patronales</small></div>
+      </div>
+      <div class="tarjeta">
+        <h2>Archivos incorporados</h2>
+        <div class="tabla-caja baja"><table class="tabla" id="tabla-historico"></table></div>
+      </div>
+      <div class="tarjeta">
+        <h2>Añadir histórico</h2>
+        <label class="casilla"><input type="checkbox" id="h-validado"> Marcar como validada la información de estos archivos</label>
+        <label class="soltar" id="soltar-historico">
+          <input type="file" id="archivo-historico" accept=".xlsx,.xlsm,.csv" multiple>
+          <b>Arrastra uno o varios archivos aquí o haz clic para elegirlos</b>
+          <span>Necesitan al menos una de estas columnas: cuenta, nrp o empresa.</span>
+        </label>
+        <div class="avance indefinido" id="avance-historico" hidden>
+          <div class="avance-texto" id="avance-historico-texto">Preparando…</div>
+          <div class="avance-pista"><div class="avance-relleno"></div></div>
+        </div>
+        <div class="caja-error" id="historico-error"></div>
+        <div class="caja-aviso" id="historico-resultado"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- FUENTES ---------------- -->
+    <section class="seccion-pagina" id="sec-fuentes" data-titulo="Fuentes" hidden>
+      <div class="encabezado">
+        <div><span class="eyebrow">Configuración</span><h1>Fuentes y credenciales</h1></div>
+        <p class="sub">Copias locales de INEGI DENUE y Tukan, credenciales y disponibilidad de servicios.</p>
+      </div>
+
+      <div class="tarjeta">
+        <div class="tarjeta-cabeza"><h2>INEGI DENUE local</h2><span class="pista" id="f-denue-pista"></span></div>
+        <div class="kpis" id="f-denue-kpis"></div>
+        <p class="pista">Descarga masiva de INEGI: 33 archivos (~630 MB). Puede tardar 20 a 40 minutos.</p>
+        <div class="avance" id="avance-denue" hidden>
+          <div class="avance-texto" id="avance-denue-texto">Preparando…</div>
+          <div class="avance-pista"><div class="avance-relleno" id="avance-denue-relleno"></div></div>
+        </div>
+        <div class="caja-error" id="denue-error"></div>
+        <div class="fila-acciones"><button class="secundario" type="button" id="f-denue-actualizar">Descargar o actualizar DENUE</button></div>
+      </div>
+
+      <div class="tarjeta">
+        <div class="tarjeta-cabeza"><h2>Tukan local</h2><span class="pista" id="f-tukan-pista"></span></div>
+        <div class="kpis" id="f-tukan-kpis"></div>
+        <div class="avance indefinido" id="avance-tukan" hidden>
+          <div class="avance-texto" id="avance-tukan-texto">Preparando…</div>
+          <div class="avance-pista"><div class="avance-relleno"></div></div>
+        </div>
+        <div class="caja-error" id="tukan-error"></div>
+        <div class="fila-acciones"><button class="secundario" type="button" id="f-tukan-precargar">Volver a precargar Tukan</button></div>
+      </div>
+
+      <form class="tarjeta" id="forma-tokens">
+        <h2>Credenciales</h2>
+        <div class="rejilla-2">
+          <div><label for="t-denue">Token de la API de DENUE</label><input id="t-denue" type="password" autocomplete="off" placeholder="Opcional: la copia local no lo necesita"></div>
+          <div><label for="t-searx">SearXNG</label><input id="t-searx" autocomplete="off" placeholder="Opcional · http://localhost:8080"></div>
+        </div>
+        <div class="caja-aviso" id="tokens-resultado"></div>
+        <div class="fila-acciones"><button class="secundario" type="submit">Guardar configuración</button></div>
+      </form>
+
+      <div class="tarjeta">
+        <h2>Salud de fuentes externas</h2>
+        <div class="tabla-caja baja"><table class="tabla" id="tabla-salud"></table></div>
+      </div>
+    </section>
+
+    <!-- ---------------- AUDITORÍA ---------------- -->
+    <section class="seccion-pagina" id="sec-auditoria" data-titulo="Auditoría" hidden>
+      <div class="encabezado">
+        <div><span class="eyebrow">Trazabilidad</span><h1>Auditoría</h1></div>
+        <p class="sub">Evidencia de cada decisión y eventos de red.</p>
+      </div>
+      <div class="tarjeta">
+        <h2>Evidencia</h2>
+        <div class="tabla-caja"><table class="tabla" id="tabla-evidencia"></table></div>
+      </div>
+      <div class="tarjeta">
+        <h2>Eventos de red</h2>
+        <div class="tabla-caja baja"><table class="tabla" id="tabla-red"></table></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

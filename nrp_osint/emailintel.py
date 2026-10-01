@@ -1,7 +1,7 @@
 import math, re, json
 from collections import Counter
 from .normalize import fold
-from .domain import root_domain
+from .domain import mail_domain
 
 def token(x):
     return re.sub(r"[^a-z0-9]","",fold(x).lower())
@@ -81,7 +81,9 @@ def generate(person,pattern,domain):
         "given.paternal":f"{given}.{pat}",
     }
     local=mapping.get(pattern,"")
-    return f"{local}@{root_domain(domain)}".lower() if local and root_domain(domain) else ""
+    # El dominio va tal cual se observo despues de la @: no se recorta ni se inventa.
+    dom=mail_domain(domain)
+    return f"{local}@{dom}".lower() if local and dom else ""
 
 def rank_emails(person,domain,patterns):
     total=sum(float(v) for v in patterns.values()) or 0
@@ -105,31 +107,119 @@ GENERIC_LOCALS = {
     "correo", "noreply", "no-reply", "webmaster", "marketing", "pedidos", "reservaciones", "empleo",
 }
 _LOCAL_SHAPES = (
-    (re.compile(r"^[a-z]{2,}\.[a-z]{2,}$"), "first.paternal"),
+    # El guion admite apellidos compuestos: 'perla.uvon-borsted'.
+    (re.compile(r"^[a-z]{2,}\.[a-z]{2,}(?:-[a-z]{2,})?$"), "first.paternal"),
     (re.compile(r"^[a-z]{2,}_[a-z]{2,}$"), "first_paternal"),
     (re.compile(r"^[a-z]{2,}-[a-z]{2,}$"), "first-paternal"),
     (re.compile(r"^[a-z]\.[a-z]{3,}$"), "f.paternal"),
 )
 
-def pattern_from_local_part(local):
+# Apellidos y nombres frecuentes en Mexico. Solo sirven para reconocer correos de
+# una sola palabra sin separador ('jmartinez', 'juanperez'); si no aparecen aqui,
+# esos correos simplemente no se usan como muestra.
+COMMON_SURNAMES = frozenset("""
+hernandez garcia martinez lopez gonzalez perez rodriguez sanchez ramirez cruz flores gomez morales vazquez
+reyes jimenez torres diaz gutierrez ruiz mendoza aguilar ortiz moreno castillo romero alvarez mendez chavez
+rivera juarez ramos dominguez herrera medina castro vargas guzman velazquez munoz rojas contreras salazar
+luna ortega santiago guerrero bautista estrada cortes delgado sandoval soto rios alvarado carrillo espinoza
+silva navarro mejia salas leon cervantes campos vega cabrera nunez rosas marquez ibarra fuentes pacheco
+avila figueroa molina valdez camacho trejo zamora acosta miranda escobar arellano galvan lara solis rangel
+duran rosales villa robles cardenas orozco serrano maldonado beltran pena osorio calderon padilla montes
+velasco meza valencia rubio enriquez gallegos franco cano andrade becerra cisneros zuniga barrera de leon
+espinosa ayala ochoa macias villanueva arias benitez carmona olvera sosa bravo marin ponce montoya cuevas
+paredes ventura lozano esquivel cordova tapia cuellar salinas vera guerra quintero vallejo sierra lugo
+nava aguirre correa santos pineda corona bernal alonso hidalgo arroyo palacios reyna villarreal garza
+trevino cavazos elizondo saldana tamez zapata guajardo alanis barragan carrasco cantu leal martin
+""".split())
+COMMON_FIRST_NAMES = frozenset("""
+jose juan maria luis carlos jorge miguel francisco antonio jesus alejandro manuel pedro ricardo roberto
+fernando javier david daniel eduardo rafael raul sergio arturo oscar mario hector victor enrique alberto
+alfredo jaime gerardo ramon guillermo salvador ruben martin hugo ivan adrian pablo andres diego gabriel
+rodrigo marco cesar armando ernesto ana laura patricia guadalupe rosa elena leticia martha claudia monica
+veronica adriana alejandra gabriela silvia sandra lucia teresa carmen beatriz norma araceli diana karla
+paola daniela andrea mariana fernanda sofia valeria jessica erika liliana susana yolanda angelica brenda
+cristina gloria irma lorena maribel nancy rocio angel abraham emilio octavio rogelio saul felipe julio
+evelyn isabel elizabeth josefina eugenia alicia margarita esther luz dolores concepcion pilar ines
+jonathan cristian christian kevin omar alan ulises israel samuel joaquin agustin tomas nicolas lorenzo
+aaron edgar oswaldo osvaldo alfonso alvaro arnulfo benjamin bernardo braulio bruno camilo cristobal
+damian dario efrain eliseo elias erick erik esteban eugenio ezequiel fabian federico fidel gilberto
+gonzalo gregorio gustavo heriberto horacio humberto ignacio isaac jacobo jairo jeronimo joel jonas
+jordi josue julian leonardo leopoldo lucas marcos mauricio maximiliano moises nestor noe orlando
+pascual patricio rene reynaldo reinaldo rigoberto santiago sebastian silvestre teodoro valentin
+vicente wilfrido xavier abel adolfo alonso amado anselmo apolinar aurelio baltazar candelario ciro
+crispin edmundo eloy emanuel emmanuel ernesto everardo faustino fermin filiberto florencio genaro
+german gerson hilario hiram isidro jacinto jaciel juventino lazaro leobardo lino macario marcelo
+margarito melquiades misael nazario nemesio pablo porfirio quirino ramiro raymundo refugio rolando
+romeo rosendo rosalio rufino samuel severiano simon tadeo tiburcio tomas ubaldo uriel urbano
+abigail adela adelina alba alejandrina alma amalia amparo angela angeles antonia araceli aurora
+azucena barbara blanca carina carla carolina catalina cecilia celia citlali clara consuelo
+cynthia dalia debora delia denisse dulce edith elsa elvira emma estela estefania eva fabiola
+flor francisca gisela graciela griselda hilda iris itzel ivonne jacqueline janet jazmin joana
+johana josefa juana judith julia julieta karen karina leonor lidia lilia lizbeth lourdes luisa
+magdalena maira marcela maricela marisol marlene matilde mayra mercedes miriam mireya myriam
+natalia nayeli nelly noemi olga olivia pamela perla priscila raquel rebeca regina reyna rosalba
+rosario ruth sara selene sonia tania tatiana virginia viviana ximena yadira yesenia zaira
+""".split()) - {"alba", "flor", "luz"}  # tambien forman nombres de una pieza: rosalba, marisol...
+
+def pattern_from_local_part(local, allow_single=False):
     """Patron probable de un correo cuando no se conoce el nombre de la persona.
-    Solo formas inequivocas con separador; 'mhernandez' o 'ventas' no se adivinan."""
+    Formas con separador son inequivocas. Las de una sola palabra solo se aceptan
+    con allow_single y si el resto es un apellido conocido ('jmartinez')."""
     local = (local or "").lower().strip()
     if not local or any(part in GENERIC_LOCALS for part in re.split(r"[._-]", local)):
         return ""
     for rx, pat in _LOCAL_SHAPES:
         if rx.match(local):
+            # 'victorhugo.olivares': dos nombres juntos antes del punto.
+            if pat == "first.paternal" and _dos_nombres(local.split(".", 1)[0]):
+                return "given.paternal"
             return pat
+    if allow_single and re.fullmatch(r"[a-z]{4,}", local):
+        if local[1:] in COMMON_SURNAMES:
+            return "f_paternal"
+        for i in range(3, len(local) - 3):
+            if local[:i] in COMMON_FIRST_NAMES and local[i:] in COMMON_SURNAMES:
+                return "firstpaternal"
     return ""
 
-def weak_pattern_confidence(votes):
-    """Confianza para patrones vistos en correos sin nombre (p. ej. DENUE).
+_ENLACES = ("delos", "delas", "dela", "del", "de", "")  # mariadelcarmen, mariadelosangeles
+
+def _dos_nombres(x):
+    for i in range(3, len(x) - 2):
+        if x[:i] in COMMON_FIRST_NAMES:
+            resto = x[i:]
+            if any(resto.startswith(e) and resto[len(e):] in COMMON_FIRST_NAMES for e in _ENLACES):
+                return True
+    return False
+
+def nombres_juntos(votes, minimo=3, proporcion=0.2):
+    """Decide si la empresa escribe TODOS los nombres juntos (victorhugo.olivares)
+    o solo el primero (victor.olivares).
+
+    Sin el nombre de la persona, 'juan.perez' puede ser de cualquiera de las dos
+    reglas: una persona con un solo nombre se ve igual. Pero con la regla del
+    primer nombre nunca aparecerian dos nombres juntos; si aparecen varios, la
+    regla es la de todos los nombres y los 'juan.perez' son gente de un nombre.
+    Con uno o dos casos sueltos se tratan como excepciones (alguien conocido por
+    su nombre compuesto) y cuentan como nombre.apellido."""
+    g, f = votes.get("given.paternal", 0), votes.get("first.paternal", 0)
+    if not g:
+        return dict(votes)
+    v = {k: n for k, n in votes.items() if k not in ("given.paternal", "first.paternal")}
+    if g >= minimo and g / (g + f) >= proporcion:
+        v["given.paternal"] = g + f
+    else:
+        v["first.paternal"] = g + f
+    return v
+
+def weak_pattern_confidence(votes, cap=0.66):
+    """Confianza para patrones vistos en correos sin nombre (DENUE, Tukan).
     Nunca alcanza el umbral de un patron aprendido con nombre y correo (0.72)."""
     total = sum(votes.values())
     if not total:
         return 0.0
     dominance = max(votes.values()) / total
-    return round(min(0.66, (0.48 + 0.05 * min(total, 3)) * dominance), 3)
+    return round(min(cap, (0.48 + 0.05 * min(total, 4)) * dominance), 3)
 
 def composed_confidence(company_conf,domain_conf,pattern_conf,mx_valid):
     # Weighted geometric composition. It avoids pretending the stages are independent,

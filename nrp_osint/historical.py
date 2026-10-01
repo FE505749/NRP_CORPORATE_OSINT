@@ -5,7 +5,7 @@ from itertools import groupby
 from openpyxl import load_workbook
 from rapidfuzz import process,fuzz
 from .normalize import clean_text,normalize_nrp,normalize_company,canonical_person,employer_key,norm
-from .domain import root_domain
+from .domain import root_domain,mail_domain
 from .emailintel import infer_patterns
 from .tabular import csv_format,csv_incrustado
 
@@ -111,8 +111,8 @@ def normalize_hist_row(row,m,source):
     email,extra=_correos_de_fila(row,m,g('email').lower())
     alt=g('email_alt')
     alternativos=[x for x in ([alt] if alt else [])+extra if x]
-    if not domain and '@' in email:domain=email.split('@',1)[1]
-    domain=root_domain(domain)
+    # El dominio es exactamente lo que va despues de la @ (bancomer.com.mx), sin recortar.
+    domain=mail_domain(email) if not domain and '@' in email else (mail_domain(domain) or root_domain(domain))
     first,pat,mat=g('first_names'),g('paternal'),g('maternal')
     # Archivos que traen el nombre en una sola columna en vez de tres.
     completo=g('full_name')

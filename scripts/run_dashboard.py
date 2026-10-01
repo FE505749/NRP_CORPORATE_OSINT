@@ -1,4 +1,8 @@
-"""Arranque portable del dashboard para macOS y Windows."""
+"""Arranque portable de NRP Intelligence para macOS y Windows.
+
+Levanta el servidor local (FastAPI + uvicorn, api/main.py), espera a que
+responda y abre el navegador. Mismo esquema que skill-diagramas-visio.
+"""
 
 from pathlib import Path
 import argparse
@@ -6,6 +10,7 @@ import os
 import socket
 import subprocess
 import sys
+import time
 import urllib.request
 import webbrowser
 
@@ -32,23 +37,16 @@ def remember_port(port: int) -> None:
         pass
 
 
-def skip_streamlit_welcome() -> None:
-    """En el primer arranque Streamlit pide un correo por stdin y bloquea el
-    lanzador. Dejamos la credencial vacia para que arranque sin preguntar."""
-    credentials = Path.home() / ".streamlit" / "credentials.toml"
-    if credentials.exists():
-        return
-    try:
-        credentials.parent.mkdir(parents=True, exist_ok=True)
-        credentials.write_text('[general]\nemail = ""\n', encoding="utf-8")
-    except OSError:
-        pass
+# Directo, sin el proxy de Windows: con el proxy corporativo, una consulta a
+# 127.0.0.1 sale a la red y vuelve con 403, y el lanzador nunca veria el servidor.
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def streamlit_is_running(url: str) -> bool:
+def app_is_running(url: str) -> bool:
+    """Solo cuenta un servidor que responda como NRP Intelligence."""
     try:
-        with urllib.request.urlopen(f"{url}/_stcore/health", timeout=0.8) as response:
-            return response.status == 200
+        with _LOCAL.open(f"{url}/api/salud", timeout=0.8) as response:
+            return response.status == 200 and b"NRP Intelligence" in response.read()
     except Exception:
         return False
 
@@ -68,6 +66,7 @@ def available_port(host: str, preferred: int) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Inicia NRP Intelligence en el navegador local.")
     parser.add_argument("--check", action="store_true", help="Valida el lanzador sin iniciar el servidor.")
+    parser.add_argument("--no-browser", action="store_true", help="No abre el navegador.")
     args = parser.parse_args()
 
     token_value = os.getenv("TOKENS_FILE", "tokens.env")
@@ -77,12 +76,11 @@ def main() -> int:
     load_dotenv(token_path, override=False)
 
     try:
-        import streamlit  # noqa: F401
+        import fastapi  # noqa: F401
+        import uvicorn  # noqa: F401
     except ImportError:
-        print("Streamlit no esta instalado. Ejecuta primero el instalador de tu sistema.", file=sys.stderr)
+        print("FastAPI o uvicorn no estan instalados. Ejecuta primero el instalador de tu sistema.", file=sys.stderr)
         return 1
-
-    skip_streamlit_welcome()
 
     host = os.getenv("NRP_HOST", "127.0.0.1")
     try:
@@ -96,38 +94,39 @@ def main() -> int:
         print(f"Lanzador OK | {sys.platform} | Python {sys.version_info.major}.{sys.version_info.minor} | {preferred_url}")
         return 0
 
-    # Solo reutilizamos un servidor que hayamos iniciado nosotros. Un Streamlit
-    # ajeno en el puerto preferido no es este dashboard: hay que ceder el puerto.
+    # Solo reutilizamos un servidor que sea este programa.
     known = remembered_port()
     if known is not None:
         known_url = f"http://{host}:{known}"
-        if streamlit_is_running(known_url):
-            print(f"El dashboard ya esta activo en {known_url}")
-            webbrowser.open(known_url)
+        if app_is_running(known_url):
+            print(f"NRP Intelligence ya esta activo en {known_url}")
+            if not args.no_browser:
+                webbrowser.open(known_url)
             return 0
 
     port = available_port(host, preferred_port)
     if port != preferred_port:
         print(f"El puerto {preferred_port} esta ocupado por otro programa. Usando {port}.")
     remember_port(port)
-    command = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(PROJECT_ROOT / "dashboard.py"),
-        "--server.address",
-        host,
-        "--server.port",
-        str(port),
-        "--server.headless",
-        "false",
-        "--browser.gatherUsageStats",
-        "false",
-    ]
+    url = f"http://{host}:{port}"
+    command = [sys.executable, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(port)]
     environment = os.environ.copy()
     environment.setdefault("PYTHONUTF8", "1")
-    return subprocess.call(command, cwd=PROJECT_ROOT, env=environment)
+    proceso = subprocess.Popen(command, cwd=PROJECT_ROOT, env=environment)
+    print(f"NRP Intelligence en {url}  (Ctrl+C para detener)")
+    try:
+        for _ in range(120):
+            if proceso.poll() is not None:
+                return proceso.returncode
+            if app_is_running(url):
+                if not args.no_browser:
+                    webbrowser.open(url)
+                break
+            time.sleep(0.25)
+        return proceso.wait()
+    except KeyboardInterrupt:
+        proceso.terminate()
+        return 0
 
 
 if __name__ == "__main__":

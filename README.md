@@ -1,278 +1,185 @@
-# NRP Corporate OSINT V4
+# NRP Intelligence
 
-Motor OSINT local para construir contactos corporativos a partir de **Cuenta, NRP, empresa y nombre**, con prioridad absoluta a conocimiento histórico local antes de consultar Internet.
+Motor local para **estimar el correo corporativo de una persona** a partir de su nombre y su empresa.
+Busca la empresa en copias locales de **INEGI DENUE** y **Tukan**, saca el dominio de **correos reales**
+y aprende el formato que usa cada empresa. Todo corre en el equipo: sin Internet y sin que NSS o CURP salgan de él.
 
-## Qué resuelve
+---
 
-Entrada principal esperada:
+## Qué se hizo en esta rama
 
-`cuenta (id_cuenta), NSS, Entidad, Curp_2, Edad, Edad_origen, nrp, nombre_empresa, blindaje, nombre, a_paterno, a_materno, sexo, instituto`
+| Cambio | Qué resuelve | Dónde |
+|---|---|---|
+| **Tukan como segunda fuente** | Base precargada de contactos por NRP. Se consulta después de DENUE y siempre gana el registro **ACTIVO** sobre CADUCO o REVOCADO. | `nrp_osint/tukan_local.py` |
+| **Dominio = lo que va después de la @** | El dominio sale de **correos reales**, nunca del sitio web si hay correos, y **sin recortarlo**: `luis.felipe@bancomer.com.mx` → `bancomer.com.mx`. Ej.: la web de Profuturo es `profuturo.mx`, pero sus correos son `@profuturo.com.mx`. | `nrp_osint/domain.py` (`mail_domain`), `nrp_osint/employer.py` (paso D3) |
+| **Correos de todo el grupo** | Se juntan los correos de todas las sucursales y razones sociales que contienen el nombre buscado ("BBVA" junta BBVA BANCOMER, GRUPO FINANCIERO BBVA…). Un nombre demasiado genérico no se usa. | `nrp_osint/denue_local.py` (`brand_email_hosts`) |
+| **Detección de "nombres juntos"** | Si una empresa escribe todos los nombres juntos (`victorhugo.olivares@bbva.com`), el correo de Francisco Javier sale `franciscojavier.espinoza@`. Regla: al menos 3 casos y el 20 % de los nombre.apellido. | `nrp_osint/emailintel.py` (`nombres_juntos`) |
+| **Búsqueda de una persona** | Formulario: primer y segundo nombre, apellidos y empresa. Muestra el correo, el desglose de formatos, el **veredicto** en palabras y los correos reales (con su estatus en Tukan). | `nrp_osint/persona.py` |
+| **Búsqueda con un Excel** | Cada fila se busca **exactamente igual** que una persona. Devuelve un Excel con las pestañas **Correos** y **Detalle**. | `nrp_osint/lote.py` |
+| **Interfaz nueva sin Streamlit** | Servidor **FastAPI + uvicorn** y página HTML/CSS/JS con el diseño de *skill-diagramas-visio* (navy y dorado Profuturo, Mulish, tema claro/oscuro). | `api/main.py`, `front/` |
 
-> NSS y CURP_2 se conservan únicamente como campos locales de unión/salida. **No se usan en búsquedas externas**.
+Se quitaron `dashboard.py`, `.streamlit/` y Streamlit de las dependencias.
 
-### Orden de resolución
+---
 
-1. **id_cuenta exacto** en históricos → reutiliza correo y completa NRP/empresa/dominio si faltan.
-2. **NRP exacto** → reutiliza empresa, dominio y patrón de cualquier cuenta del mismo patrón.
-3. **Empresa exacta normalizada** → reutiliza perfil corporativo aunque tenga otro NRP.
-4. **Empresa similar** → RapidFuzz con umbral alto (93 por defecto).
-5. **DENUE** (copia local o API) → empresa, razón social, teléfono, correo y página web cuando estén disponibles.
-6. **Clearbit Autocomplete** → candidato de dominio; nunca se acepta solo, se valida contra la web.
-7. **Wikidata** → sitio oficial P856 cuando existe.
-8. **Búsqueda pública DDGS/SearXNG** → último recurso.
-9. **DNS/MX** → comprueba si el dominio está configurado para recibir correo.
-10. **Sitemap + web corporativa + JSON-LD + Common Crawl** → aprende patrón de correo y contactos publicados.
+## Cómo arrancar
 
-## DENUE local (sin token y sin Internet)
+1. Instala (una vez): `setup_windows.bat` (o `setup_mac.command`).
+2. Arranca: **`run_dashboard_windows.bat`** (o `run_mac.command`).
+3. Se abre **http://127.0.0.1:8501**. Si el puerto está ocupado prueba del 8502 al 8510.
 
-En lugar de consultar la API de INEGI empresa por empresa, el motor puede usar una
-**copia local de la descarga masiva del DENUE** (33 archivos CSV, uno por estado;
-Estado de México viene en dos partes).
+A mano: `.venv-windows\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8501`
 
-1. **Fuentes → DENUE local → Descargar / actualizar** (o `cli.py denue-update`).
-   Descarga ~630 MB a `data/denue/raw/` y construye `data/denue/denue.sqlite`
-   con índice de texto completo (FTS5) sobre razón social y nombre comercial.
-2. **Buscar → Buscar en DENUE local** (o `cli.py run --denue-local`).
-   Resuelve empresa y dominio solo con la copia local: no usa buscadores,
-   Clearbit, Wikidata, rastreo web ni DNS.
+> Con el proxy corporativo, las consultas a `127.0.0.1` pueden salir a la red y volver con 403.
+> El lanzador ya lo evita; si pruebas la API desde otro programa, desactiva el proxy para localhost.
 
-Reglas del modo local:
+Requisitos: Python 3.11–3.13 de 64 bits. Las copias locales de DENUE y Tukan deben estar construidas (ver *Fuentes locales*).
 
-- Búsqueda **nacional**: el estado del archivo es el del trabajador, no el del patrón.
-- A igual parecido de nombre, gana el establecimiento que sí registró sitio web.
-- Sitios de redes sociales (Facebook, Instagram…) y correos gratuitos no cuentan como dominio.
-- Los correos que la empresa publicó en DENUE con forma de persona
-  (`nombre.apellido@`, `n.apellido@`) se usan como **muestra débil del patrón**
-  (confianza ≤ 0.66, por debajo de un patrón aprendido con nombre y correo).
-  El resultado se etiqueta `DEDUCIDO_PATRON_DENUE`.
-- Empresa encontrada sin sitio web → `SIN_DOMINIO_DENUE`; empresa no encontrada →
-  `SIN_COINCIDENCIA_DENUE`. Ambos quedan como no resueltos para revisarlos después.
+---
 
-Prueba rápida: `cli.py denue-buscar "PROFUTURO GNP"`.
+## Cómo se construye un correo
 
-## La idea clave
+Ejemplo: **Francisco Javier Espinoza Mendieta**, empresa **BBVA**.
 
-No se investiga a cada persona desde cero.
+1. **Empresa.** Se busca en DENUE (nombre normalizado, sin "SA DE CV") y luego en Tukan (por NRP o por nombre).
+2. **Dominio.** Votan los **correos reales** de la empresa: los de todas sus sucursales en DENUE más los de Tukan (un contacto ACTIVO vale doble).
+   - Un dominio ajeno con un solo correo (errata, socio, otro país) no basta.
+   - El dominio de un despacho contable que aparece en muchas empresas no cuenta.
+   - Solo si no hay ningún correo de empresa se usa el **sitio web** (confianza 0.85; 0.92 si hay correos con ese dominio).
+3. **Formato.** Se cuentan todos los correos reales del dominio exacto, en DENUE y Tukan:
+   `nombre.apellido`, `nombresjuntos.apellido`, `inicial.apellido`, `inicialapellido`…
+   Los genéricos (`ventas@`, `info@`) no cuentan.
+4. **Correo.** Se arma con el formato ganador → `franciscojavier.espinoza@bbva.com`; los demás formatos quedan como alternativas.
+5. **Veredicto.** Explica en palabras por qué salió ese correo (cuántos correos lo respaldan y de qué tipo).
+
+| Tipo de resultado | Significa |
+|---|---|
+| `DEDUCIDO_PATRON_DENUE_TUKAN` / `_DENUE` / `_TUKAN` | Formato aprendido de correos reales de esas fuentes |
+| `CONFIRMADO_TUKAN` | El correo existe tal cual en Tukan |
+| `DEDUCIDO_SIN_PATRON` | Hay dominio pero ningún correo de persona: se usó nombre.apellido (confianza baja) |
+| `SIN_DOMINIO_DENUE` / `SIN_DOMINIO_TUKAN` / `SIN_COINCIDENCIA_DENUE` | No se pudo estimar el correo |
+
+---
+
+## Buscar con un Excel
+
+**Entrada** (hoja activa, títulos en la primera fila; también CSV):
+
+| cuenta | primer_nombre | segundo_nombre | primer_apellido | segundo_apellido | empresa |
+|---|---|---|---|---|---|
+
+Obligatorias: `cuenta`, `primer_nombre`, `primer_apellido`, `empresa`. La página ofrece la plantilla vacía.
+Las filas incompletas salen en el resultado con su motivo. Cada empresa distinta se busca una sola vez.
+
+**Salida** (`data/exports/correos_estimados_AAAAMMDD_HHMMSS.xlsx`):
+
+- **Correos**: Cuenta, Correo estimado, Patrón, Dominio.
+- **Detalle**: datos de entrada, empresa encontrada, tipo, confianza del correo y del dominio, sitio web,
+  alternativas, correos reales del dominio, desglose de formatos, ejemplos, veredicto y cómo se construyó.
+
+---
+
+## Fuentes locales
+
+### INEGI DENUE
+Descarga masiva de INEGI (33 archivos, ~630 MB) en `data/denue/denue.sqlite`, con índice de texto completo.
+Construir o actualizar: **Fuentes → Descargar o actualizar DENUE**, o `cli.py denue-update`.
+
+### Tukan
+`Tukan.xlsx` (NRP, EMPRESA, ESTATUS, EMAIL) precargado en `data/tukan/tukan.sqlite`.
+Precargar de nuevo: **Fuentes → Volver a precargar Tukan**, o `cli.py tukan-update [ruta]`
+(por defecto toma `Tukan.xlsx` junto al proyecto). Prueba rápida: `cli.py tukan-buscar 01010279105`.
+
+- ACTIVO primero en contacto y dominio.
+- Correos gratuitos (incluidas erratas como `hotmai.com`) y de proveedores de Internet: contacto, nunca dominio.
+- Un dominio con correos de más de 3 empresas que no se le parecen se trata como despacho contable.
+
+---
+
+## La página
+
+| Sección | Qué hace |
+|---|---|
+| **Buscar** | Búsqueda de una persona y búsqueda con un Excel |
+| **Resumen** | Conteos, cobertura y salud de fuentes de la base cargada |
+| **Resultados** | Consulta y exporta la base cargada |
+| **Histórico** | Archivos históricos cargados y carga de nuevos |
+| **Fuentes** | Estado de DENUE y Tukan, credenciales y salud de fuentes externas |
+| **Auditoría** | Evidencia de cada decisión y eventos de red |
+
+La columna izquierda muestra qué fuentes locales están disponibles y lo guardado en la base.
+
+---
+
+## Estructura
 
 ```text
-500,000 personas
-       ↓
-Cuenta / NRP / empresa
-       ↓
-conocimiento local
-       ↓
-NRP únicos y empresas únicas
-       ↓
-investigar empleador una vez
-       ↓
-reutilizar dominio y patrón
-       ↓
-generar correos para todos sus empleados
+api/main.py            Servidor FastAPI: entrega la página y las funciones en /api
+front/                 Página: index.html, styles/ (tokens.css = paleta Profuturo), js/app.js, img/, fonts/
+nrp_osint/
+  persona.py           Búsqueda de personas (una o muchas) + veredicto y desglose
+  lote.py              Lectura del Excel y exportación con pestañas Correos y Detalle
+  employer.py          Resolución de la empresa: DENUE → Tukan → dominio por correos → formato
+  denue_local.py       Copia local de DENUE y búsqueda en todo el grupo
+  tukan_local.py       Copia local de Tukan
+  emailintel.py        Formatos de correo, nombres juntos y confianza
+  domain.py            Dominio exacto tras la @ (mail_domain)
+  pipeline.py, db.py, … Motor y base SQLite (WAL)
+scripts/run_dashboard.py  Lanzador (uvicorn + navegador)
+tests/                 Pruebas pytest
 ```
 
-Una empresa puede tener múltiples NRP. Por eso existe `company_profiles`: al aprender el dominio/patrón con un NRP, otro NRP de la misma empresa puede reutilizarlo.
+---
 
-## Compatibilidad
-
-El proyecto usa el mismo núcleo en **macOS y Windows**. Las rutas de la base, cargas, exportaciones y tokens se resuelven desde la carpeta del proyecto, aunque el programa se abra con doble clic o desde otro directorio. No es necesario activar manualmente el entorno virtual.
-
-La carpeta `.venv` no debe copiarse entre sistemas ni incluirse al distribuir el proyecto. Si el instalador detecta un entorno creado por otro sistema, genera automáticamente `.venv-macos` o `.venv-windows` sin borrar el anterior.
-
-Requisitos:
-
-- Python 3.11, 3.12 o 3.13 de 64 bits.
-- Acceso a Internet durante la instalación de dependencias.
-- Un navegador moderno.
-
-Las versiones directas verificadas están fijadas en `constraints.txt` para que la instalación sea consistente en los dos sistemas.
-
-### Instalación en macOS
-
-1. Instala Python 3.11, 3.12 o 3.13.
-2. Descomprime el proyecto.
-3. Abre `setup_mac.command` con doble clic, o ejecuta `./setup_mac.sh` desde Terminal.
-4. Abre `run_mac.command`.
-
-Si macOS bloquea el primer inicio, usa clic derecho → **Abrir**. Desde Terminal también puedes ejecutar:
-
-```bash
-chmod +x setup_mac.command setup_mac.sh run_mac.command run_cli_mac.command
-./setup_mac.command
-./run_mac.command
-```
-
-### Instalación en Windows
-
-1. Instala Python 3.11, 3.12 o 3.13 y habilita **Add Python to PATH**.
-2. Descomprime el proyecto en una carpeta local.
-3. Ejecuta `setup_windows.bat`.
-4. Ejecuta `run_dashboard_windows.bat`.
-
-En ambos sistemas el dashboard usa `http://127.0.0.1:8501`. Si ese puerto está ocupado por otro programa, el lanzador prueba automáticamente hasta el 8510. Si el dashboard ya está activo, simplemente lo abre en el navegador.
-
-Antes de mover una base SQLite entre equipos, cierra el dashboard por completo. No copies únicamente los archivos `-wal` o `-shm`, ni trabajes directamente desde una carpeta de red o sincronización mientras la aplicación está abierta.
-
-## Uso desde la interfaz
-
-### Base objetivo
-Sube tu Excel o CSV con las columnas indicadas.
-
-### Históricos
-Sube todos los Excel/CSV anteriores que puedan contener:
-
-- Cuenta / id_cuenta
-- NRP
-- empresa / razón social
-- dominio / website
-- correo
-- patrón de correo
-- nombre y apellidos
-
-Puedes subir múltiples archivos. El motor crea una base de conocimiento consolidada.
-
-### Reutilización local
-Ejecuta **Buscar coincidencias Cuenta → NRP → Empresa** antes de usar Internet.
-
-### Cruce local
-
-La sección **Cruce** compara la base objetivo con los históricos por `ID_Cuenta`, `NRP` y empresa exacta normalizada. Es un proceso completamente local: no usa INEGI, DENUE, DNS, buscadores ni sitios web.
-
-### Enriquecimiento externo
-Procesa solo los empleadores que sigan pendientes.
-
-### Exportación
-Genera:
-
-- `data/exports/resultados_contactos.csv`
-- `data/exports/parquet/*.parquet`
-- `data/exports/empresas_resueltas.csv`
-- `data/exports/evidencia.csv`
-- `data/exports/historico_consolidado.csv`
-- `data/exports/resumen_ejecutivo.xlsx`
-
-## Tokens
-
-Copia `tokens.example.env` a `tokens.env` o usa la sección **Fuentes & Tokens** de la interfaz.
-
-### Recomendado
-
-`INEGI_DENUE_TOKEN=`
-
-### Opcional
-
-`SEARXNG_URL=http://localhost:8080`
-
-Clearbit Autocomplete, Wikidata, Common Crawl y DNS no requieren token en esta implementación.
-
-### Rutas y puerto opcionales
-
-En `tokens.env` puedes cambiar:
-
-```dotenv
-DB_PATH=corporate_osint.sqlite
-UPLOAD_DIR=data/uploads
-OUTPUT_DIR=data/exports
-NRP_HOST=127.0.0.1
-NRP_PORT=8501
-```
-
-Las rutas relativas se interpretan desde la carpeta del proyecto en macOS y Windows. También se aceptan rutas absolutas propias de cada sistema.
-
-## Por qué Clearbit no es la base del motor
-
-La API legacy Name-to-Domain ya no es una dependencia gratuita estable para cuentas nuevas. Se utiliza únicamente **Autocomplete** como fuente auxiliar de candidatos y el dominio debe superar una validación independiente.
-
-## Patrones de correo
-
-Incluye, entre otros:
-
-- `first.paternal` → maria.hernandez@
-- `f_paternal` → mhernandez@
-- `f.paternal` → m.hernandez@
-- `first_paternal` → maria_hernandez@
-- `first-paternal` → maria-hernandez@
-- `firstpaternal` → mariahernandez@
-- `first.last` → maria.garcia@
-- `first.paternalmaternal` → maria.hernandezgarcia@
-- `given.paternal` → mariaguadalupe.hernandez@
-
-Los candidatos se ordenan según muestras observadas en históricos o correos publicados en la web corporativa.
-
-## Confianza
-
-La confianza del correo combina:
-
-- empresa;
-- dominio;
-- patrón;
-- estado MX.
-
-`PUBLICADO` y `HISTORICO_ID_CUENTA` tienen prioridad sobre cualquier correo deducido.
-
-## Protección de IP / bloqueos
-
-Existe un `NetworkGovernor` central:
-
-- límite global;
-- límite por host;
-- intervalo mínimo por fuente;
-- clasificación de 429/403/503;
-- circuit breaker;
-- cooldown;
-- `Retry-After`;
-- eventos de red y salud por fuente;
-- los errores no se cachean como resultados vacíos.
-
-No incluye rotación de proxies/IP para evadir controles.
-
-## CLI en Windows
+## Línea de comandos
 
 ```bat
-run_cli_windows.bat init
-run_cli_windows.bat ingest-history "C:\datos\historico.xlsx"
-run_cli_windows.bat ingest-main "C:\datos\base.xlsx"
-run_cli_windows.bat local-match
-run_cli_windows.bat status
-run_cli_windows.bat run --max-jobs 100 --batch 20
-run_cli_windows.bat run --max-jobs 0 --batch 25
 run_cli_windows.bat denue-update
+run_cli_windows.bat tukan-update
+run_cli_windows.bat denue-buscar "PROFUTURO"
+run_cli_windows.bat tukan-buscar "BBVA"
+run_cli_windows.bat ingest-main "C:\datos\base.xlsx"
 run_cli_windows.bat run --denue-local --batch 200
+run_cli_windows.bat run --max-jobs 100 --batch 20     (búsqueda pública: Wikidata, web, DNS)
 run_cli_windows.bat export --output-dir data\exports
 ```
 
-## CLI en macOS
+En macOS, lo mismo con `./run_cli_mac.command`.
 
-```bash
-./run_cli_mac.command init
-./run_cli_mac.command ingest-history "/Users/usuario/datos/historico.xlsx"
-./run_cli_mac.command ingest-main "/Users/usuario/datos/base.xlsx"
-./run_cli_mac.command local-match
-./run_cli_mac.command status
-./run_cli_mac.command run --max-jobs 100 --batch 20
-./run_cli_mac.command export --output-dir data/exports
+---
+
+## Pruebas
+
+```bat
+.venv-windows\Scripts\python.exe -m pytest
+.venv-windows\Scripts\python.exe scripts\run_dashboard.py --check
 ```
 
-## Verificación técnica
+Las pruebas usan bases sintéticas; no necesitan DENUE ni Tukan reales.
 
-Después de instalar, puedes comprobar el entorno sin iniciar el servidor:
+---
 
-```bash
-# macOS
-.venv/bin/python scripts/run_dashboard.py --check
+## Configuración
 
-# Windows
-.venv\Scripts\python.exe scripts\run_dashboard.py --check
-```
+Copia `tokens.example.env` a `tokens.env`. Opcionales: `INEGI_DENUE_TOKEN` (solo para la API; la copia
+local no lo necesita), `SEARXNG_URL`, `DB_PATH`, `UPLOAD_DIR`, `OUTPUT_DIR`, `DENUE_LOCAL_PATH`,
+`TUKAN_LOCAL_PATH`, `NRP_HOST`, `NRP_PORT`. Las rutas relativas se resuelven desde la carpeta del proyecto.
 
-## Git
+---
 
-El proyecto incluye:
+## Privacidad y Git
 
-- `.gitignore`
-- `pyproject.toml`
-- pruebas `pytest`
-- GitHub Actions
-- archivos de tokens fuera de control de versiones
-- estructura `data/uploads`, `data/exports`, `logs`
+- NSS y CURP_2 se guardan solo en local y nunca se usan para buscar.
+- El servidor escucha únicamente en `127.0.0.1`.
+- No se versionan: `tokens.env`, las bases `.sqlite`, `data/denue/`, `data/tukan/`, `Tukan.xlsx`,
+  `data/uploads/`, `data/exports/` ni `logs/`.
 
-Antes de subir a Git, confirma que `tokens.env`, la base SQLite y archivos reales de clientes no estén versionados.
+---
+
+## Pendiente
+
+- **Resumen, Resultados e Histórico** siguen funcionando sobre la base cargada, pero la página ya no la carga
+  (la tarjeta "Subir una base" se reemplazó por "Buscar con un Excel"). Se puede cargar con `cli.py ingest-main`.
+- La **búsqueda pública** (Wikidata, web corporativa, DNS) solo está disponible por línea de comandos.
+- En Tukan, nombres cortos ("BBVA") no siempre coinciden con razones sociales largas; sus correos sí se usan para el formato.
+- El histórico cargado antes de esta rama guardó el dominio recortado a su raíz; lo nuevo usa el dominio exacto.

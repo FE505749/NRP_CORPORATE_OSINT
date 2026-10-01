@@ -30,6 +30,8 @@ class Settings:
     upload_dir: str = str(PROJECT_ROOT / "data" / "uploads")
     tokens_path: str = str(PROJECT_ROOT / "tokens.env")
     denue_local_path: str = str(PROJECT_ROOT / "data" / "denue" / "denue.sqlite")
+    # Segunda fuente local: contactos de Tukan por NRP (cli.py tukan-update).
+    tukan_local_path: str = str(PROJECT_ROOT / "data" / "tukan" / "tukan.sqlite")
     # Solo copia local de DENUE: sin buscadores, Clearbit, Wikidata, rastreo web ni DNS.
     denue_local_only: bool = False
 
@@ -69,6 +71,7 @@ class Settings:
             upload_dir=str(env_path("UPLOAD_DIR", "data/uploads")),
             tokens_path=str(token_file_path()),
             denue_local_path=str(env_path("DENUE_LOCAL_PATH", "data/denue/denue.sqlite")),
+            tukan_local_path=str(env_path("TUKAN_LOCAL_PATH", "data/tukan/tukan.sqlite")),
             denue_local_only=_bool("DENUE_LOCAL_ONLY", False),
             global_concurrency=int(os.getenv("GLOBAL_CONCURRENCY", "12")),
             per_host_concurrency=int(os.getenv("PER_HOST_CONCURRENCY", "2")),

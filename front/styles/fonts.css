@@ -1,0 +1,35 @@
+/*
+ * Mulish e IBM Plex Mono servidas LOCALES desde web/fonts/ (woff2, subconjunto
+ * latin, que cubre el español). Antes venían de Google Fonts y en una red sin
+ * salida la interfaz caía al fallback del sistema sin avisar.
+ *
+ * Mulish es una fuente VARIABLE: un solo archivo cubre los pesos 400-800.
+ * IBM Plex Mono es estática: un archivo por peso (400 y 500, los que se usan).
+ *
+ * Regenerar: pedir a fonts.googleapis.com/css2 con User-Agent de Chrome y
+ * bajar los woff2 del bloque «latin» de cada familia.
+ */
+@font-face {
+  font-family: 'Mulish';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/front/fonts/mulish-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/front/fonts/ibm-plex-mono-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/front/fonts/ibm-plex-mono-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

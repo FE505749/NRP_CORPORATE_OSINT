@@ -29,6 +29,22 @@ def root_domain(value):
     if tail2 in two_level and len(parts)>=3:return '.'.join(parts[-3:])
     return tail2
 
+EMAIL_RX=re.compile(r'[a-z0-9._%+\-]+@[a-z0-9\-]+(?:\.[a-z0-9\-]+)*\.[a-z]{2,}')
+
+def emails_in(text):
+    """Correos dentro de un campo; DENUE a veces trae dos separados por espacio o ';'."""
+    return EMAIL_RX.findall((text or '').lower())
+
+def mail_domain(value):
+    """Dominio de correo TAL CUAL va despues de la @, sin recortarlo a su raiz:
+    luis.felipe@bancomer.com.mx -> bancomer.com.mx; ana@correo.empresa.mx ->
+    correo.empresa.mx. Si llega una URL, solo se quita el esquema, la ruta y 'www.'."""
+    v=(value or '').strip().lower()
+    if '@' in v:v=v.rsplit('@',1)[1]
+    v=re.sub(r'^[a-z][a-z0-9+.\-]*://','',v).split('/')[0].split(':')[0].strip('. ')
+    v=v.removeprefix('www.')
+    return v if re.fullmatch(r'[a-z0-9\-]+(?:\.[a-z0-9\-]+)*\.[a-z]{2,}',v) else ''
+
 def normalize_website(v):
     v=(v or '').strip()
     if not v:return ''

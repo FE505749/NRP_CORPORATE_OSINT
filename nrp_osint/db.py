@@ -86,7 +86,9 @@ CREATE TABLE IF NOT EXISTS employers(
   match_route TEXT,
   source_summary TEXT,
   status TEXT DEFAULT 'PENDING',
-  updated_at REAL NOT NULL
+  updated_at REAL NOT NULL,
+  tukan_email TEXT DEFAULT '',
+  tukan_status TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_emp_nrp ON employers(nrp);
 CREATE INDEX IF NOT EXISTS idx_emp_company ON employers(company_norm);
@@ -233,6 +235,10 @@ class DB:
             # Validacion de dominio que ya venia hecha en el archivo de origen
             # (columna DOMINIO_VALIDO), para no repetir consultas DNS.
             self.conn.execute("ALTER TABLE historical_contacts ADD COLUMN domain_status TEXT DEFAULT ''")
+        emp={r[1] for r in self.conn.execute('PRAGMA table_info(employers)')}
+        for col in ('tukan_email','tukan_status'):
+            # Contacto del patron en Tukan y su ESTATUS (ACTIVO, CADUCO, REVOCADO).
+            if col not in emp:self.conn.execute(f"ALTER TABLE employers ADD COLUMN {col} TEXT DEFAULT ''")
         cols={r[1] for r in self.conn.execute('PRAGMA table_info(people)')}
         if 'company_norm' not in cols:
             self.conn.execute("ALTER TABLE people ADD COLUMN company_norm TEXT DEFAULT ''")
@@ -336,7 +342,7 @@ class DB:
     def update_employer_many(self,items):
         """items: (employer_key, {campo: valor}). Agrupa por juego de campos para
         emitir un executemany por forma en lugar de un UPDATE por fila."""
-        allowed={'company_canonical','company_norm','company_confidence','domain','website','domain_confidence','generic_email','phone','mx_valid','email_patterns_json','pattern_confidence','match_route','source_summary','status'}
+        allowed={'company_canonical','company_norm','company_confidence','domain','website','domain_confidence','generic_email','phone','mx_valid','email_patterns_json','pattern_confidence','match_route','source_summary','status','tukan_email','tukan_status'}
         formas={}
         for key,fields in items:
             f={k:v for k,v in fields.items() if k in allowed}
@@ -359,7 +365,7 @@ class DB:
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',(company_norm,cur['company_canonical'],cur['domain'],cur['website'],cur['domain_confidence'],cur['generic_email'],cur['phone'],cur['mx_valid'],cur['email_patterns_json'],cur['pattern_confidence'],cur['source_kind'],now)); self.conn.commit()
 
     def update_employer(self,key,**fields):
-        allowed={'company_canonical','company_norm','company_confidence','domain','website','domain_confidence','generic_email','phone','mx_valid','email_patterns_json','pattern_confidence','match_route','source_summary','status'}
+        allowed={'company_canonical','company_norm','company_confidence','domain','website','domain_confidence','generic_email','phone','mx_valid','email_patterns_json','pattern_confidence','match_route','source_summary','status','tukan_email','tukan_status'}
         f={k:v for k,v in fields.items() if k in allowed};
         if not f:return
         f['updated_at']=time.time(); sql='UPDATE employers SET '+','.join(f'{k}=?' for k in f)+' WHERE employer_key=?'; self.conn.execute(sql,list(f.values())+[key]); self.conn.commit()

@@ -5,6 +5,7 @@ RESULT_SQL='''
 SELECT p.account_id AS cuenta,p.nss_local AS NSS,p.entity AS Entidad,p.curp2_local AS Curp_2,p.age AS Edad,p.age_origin AS Edad_origen,
        p.nrp,p.company_input AS nombre_empresa_entrada,p.blindaje,p.first_names AS nombre,p.paternal AS a_paterno,p.maternal AS a_materno,p.sex AS sexo,p.institute AS instituto,
        e.company_canonical AS empresa_resuelta,e.domain,e.website,e.generic_email AS correo_generico_empresa,e.phone AS telefono_empresa,e.mx_valid,
+       e.tukan_email AS correo_contacto_tukan,e.tukan_status AS estatus_contacto_tukan,
        ROUND(e.company_confidence*100,1) AS confianza_empresa,ROUND(e.domain_confidence*100,1) AS confianza_dominio,
        ROUND(e.pattern_confidence*100,1) AS confianza_patron,e.match_route AS ruta_empresa,e.status AS estado_empresa,
        r.email AS correo_principal,r.email_type AS tipo_correo,r.email_confidence AS confianza_correo,r.email_alternatives_json,r.match_route AS ruta_contacto,r.status AS estado_contacto

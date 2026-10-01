@@ -6,6 +6,9 @@ Fuente estructurada mexicana para razón social, establecimiento, teléfono, cor
 - **Copia local** (`nrp_osint/denue_local.py`): descarga masiva de INEGI en `data/denue/denue.sqlite`. Sin token, sin red. Tiene prioridad sobre la API cuando existe.
 - **API**: requiere `INEGI_DENUE_TOKEN`. Se usa solo si no hay copia local.
 
+## Tukan
+Segunda fuente local, después de DENUE (`nrp_osint/tukan_local.py`, `data/tukan/tukan.sqlite`). Contactos por NRP con ESTATUS; ACTIVO tiene prioridad sobre CADUCO y REVOCADO. Aporta empresa por NRP, dominio corporativo, patrón débil (tope 0.70) y correo de contacto. Sin red.
+
 ## Clearbit Autocomplete
 Sin token en esta implementación. Se considera fuente auxiliar no autoritativa. Un dominio candidato debe ser validado contra el sitio.
 

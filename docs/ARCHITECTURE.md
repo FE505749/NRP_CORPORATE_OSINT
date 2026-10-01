@@ -14,7 +14,7 @@
 ## Capas
 
 ```text
-Streamlit UI
+Interfaz web local (FastAPI + uvicorn: api/main.py, front/)
    │
    ├── Upload principal
    ├── Históricos múltiples
@@ -67,7 +67,7 @@ Email Intelligence
 ## Portabilidad
 
 - `scripts/setup_env.py` crea el mismo entorno y las mismas carpetas en macOS y Windows.
-- `scripts/run_dashboard.py` inicia Streamlit mediante el intérprete del entorno virtual, abre una instancia existente y selecciona otro puerto local si 8501 está ocupado.
+- `scripts/run_dashboard.py` inicia el servidor local (FastAPI + uvicorn, `api/main.py`) con el intérprete del entorno virtual, abre una instancia existente y selecciona otro puerto local si 8501 está ocupado. La página vive en `front/` (HTML, CSS y JavaScript sin compilación, con el diseño de skill-diagramas-visio).
 - Los archivos `.command`/`.sh` y `.bat` solo seleccionan el intérprete correcto de cada sistema.
 - `nrp_osint.paths` resuelve almacenamiento y configuración desde la raíz del proyecto, independientemente del directorio de trabajo.
 - Los datos auxiliares de `tldextract` se guardan en `data/cache`, no en el perfil global del usuario.

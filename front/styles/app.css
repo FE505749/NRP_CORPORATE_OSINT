@@ -1,0 +1,15 @@
+/*
+ * NRP Intelligence — índice de estilos (mismo esquema que skill-diagramas-visio).
+ *
+ * EL ORDEN IMPORTA:
+ *   1. base      reset, esquema de color, tipografía, foco
+ *   2. botones   el `button` genérico, que los componentes especializan después
+ *   3. el resto  componentes
+ *
+ * tokens.css y fonts.css se enlazan aparte en index.html: van ANTES que esto.
+ */
+@import url("base.css");
+@import url("botones.css");
+@import url("topbar.css");
+@import url("paneles.css");
+@import url("avisos.css");

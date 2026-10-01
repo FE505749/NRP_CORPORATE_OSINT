@@ -22,13 +22,13 @@ ROWS = [
 ]
 
 
-def make_denue(tmp_path):
+def make_denue(tmp_path, rows=ROWS):
     raw = tmp_path / "denue" / "raw"
     raw.mkdir(parents=True)
     buf = io.StringIO()
     w = csv.writer(buf, quoting=csv.QUOTE_ALL)
     w.writerow(COLS)
-    w.writerows(ROWS)
+    w.writerows(rows)
     with zipfile.ZipFile(raw / "denue_09_csv.zip", "w") as z:
         # Mismo formato que INEGI: latin-1 dentro de conjunto_de_datos/
         z.writestr("conjunto_de_datos/denue_inegi_09_.csv", buf.getvalue().encode("latin-1"))
@@ -77,7 +77,7 @@ def test_pipeline_denue_local_only(tmp_path):
     db = DB(str(tmp_path / "x.sqlite"))
     ingest(db, main)
     s = Settings(db_path=str(tmp_path / "x.sqlite"), denue_local_path=str(denue_local.db_path(base)),
-                 denue_local_only=True, enable_ddgs=False)
+                 denue_local_only=True, enable_ddgs=False, tukan_local_path="")
     n = asyncio.run(Pipeline(db, s, {"denue": "", "searxng": ""}).run(max_jobs=0, batch=10))
     assert n == 3
     st = {r["nrp"]: dict(r) for r in db.conn.execute("SELECT * FROM employers")}
@@ -89,3 +89,51 @@ def test_pipeline_denue_local_only(tmp_path):
     assert r["email_type"] == "DEDUCIDO_PATRON_DENUE"
     # Sin salir a la red: ninguna fuente externa registrada
     assert db.conn.execute("SELECT COUNT(*) FROM source_health").fetchone()[0] == 0
+
+
+# Como Profuturo: la web es profu.mx, pero los correos de sus sucursales son
+# profu.com.mx. El dominio del correo sale de los correos, no del sitio web.
+SUCURSALES = [
+    ["11","S1","PROFU MATRIZ","PROFU AFORE SA DE CV","5239","Afores","251 y más personas","551","","WWW.PROFU.MX","09","Ciudad de México","Álvaro Obregón","2024-01"],
+    ["12","S2","PROFU SUCURSAL NORTE","PROFU AFORE SA DE CV","5239","Afores","11 a 30 personas","552","tiare.otero@profu.com.mx","","19","Nuevo León","Monterrey","2024-01"],
+    ["13","S3","PROFU SUCURSAL SUR","PROFU AFORE SA DE CV","5239","Afores","11 a 30 personas","553","juan.viveros@profu.com.mx","","07","Chiapas","Tuxtla","2024-01"],
+    ["14","S4","PROFU SUCURSAL CENTRO","PROFU AFORE SA DE CV","5239","Afores","11 a 30 personas","554","perla.uvon-borsted@profu.com.mx","","09","Ciudad de México","Cuauhtémoc","2024-01"],
+    # Ruido: un socio con su propio dominio y un solo correo.
+    ["15","S5","PROFU MODULO","PROFU AFORE SA DE CV","5239","Afores","0 a 5 personas","555","oscar.cota@socio.com.mx","","14","Jalisco","Zapopan","2024-01"],
+]
+
+
+def test_dominio_de_correos_no_del_sitio_web(tmp_path):
+    base = make_denue(tmp_path, SUCURSALES)
+    denue_local.build(base)
+    src = denue_local.DenueLocalSource(denue_local.db_path(base))
+    assert src.email_domain_votes("PROFU AFORE") == {"profu.com.mx": 3, "socio.com.mx": 1}
+    assert src.email_pattern_votes("", "profu.com.mx") == ({"first.paternal": 3}, 3)
+    main = tmp_path / "main.csv"
+    main.write_text("cuenta,nombre,a_paterno,a_materno,nombre_empresa,nrp\n"
+                    "F1,FRANCISCO JAVIER,ESPINOZA,MENDIETA,PROFU AFORE,\n", encoding="utf-8")
+    db = DB(str(tmp_path / "x.sqlite"))
+    ingest(db, main)
+    s = Settings(db_path=str(tmp_path / "x.sqlite"), denue_local_path=str(denue_local.db_path(base)),
+                 denue_local_only=True, enable_ddgs=False, tukan_local_path="")
+    asyncio.run(Pipeline(db, s, {"denue": "", "searxng": ""}).run(max_jobs=0, batch=10))
+    e = dict(db.conn.execute("SELECT * FROM employers").fetchone())
+    assert e["domain"] == "profu.com.mx" and "profu.mx" in e["website"].lower()  # la web se conserva como web
+    assert "DOMINIO_CORREOS_DENUE" in e["match_route"] and "DOMINIO_SITIO_WEB" not in e["match_route"]
+    r = db.conn.execute("SELECT email,email_type FROM results").fetchone()
+    assert (r["email"], r["email_type"]) == ("francisco.espinoza@profu.com.mx", "DEDUCIDO_PATRON_DENUE")
+
+
+def test_sin_correos_usa_el_sitio_web(tmp_path):
+    base = make_denue(tmp_path, SUCURSALES[:1])
+    denue_local.build(base)
+    main = tmp_path / "main.csv"
+    main.write_text("cuenta,nombre,a_paterno,a_materno,nombre_empresa,nrp\nF1,ANA,DIAZ,SOTO,PROFU AFORE,\n", encoding="utf-8")
+    db = DB(str(tmp_path / "x.sqlite"))
+    ingest(db, main)
+    s = Settings(db_path=str(tmp_path / "x.sqlite"), denue_local_path=str(denue_local.db_path(base)),
+                 denue_local_only=True, enable_ddgs=False, tukan_local_path="")
+    asyncio.run(Pipeline(db, s, {"denue": "", "searxng": ""}).run(max_jobs=0, batch=10))
+    e = dict(db.conn.execute("SELECT * FROM employers").fetchone())
+    assert e["domain"] == "profu.mx" and "DOMINIO_SITIO_WEB" in e["match_route"]
+    assert e["domain_confidence"] == .85

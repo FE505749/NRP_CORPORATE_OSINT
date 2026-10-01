@@ -9,7 +9,7 @@ from nrp_osint.local_reuse import apply_local_reuse
 from nrp_osint.pipeline import Pipeline
 from nrp_osint.exporter import export_all
 from nrp_osint.stats import counts
-from nrp_osint import denue_local
+from nrp_osint import denue_local, tukan_local
 
 app=typer.Typer(help='NRP Corporate OSINT V4')
 def ctx():load_tokens();s=Settings.from_env();return s,DB(s.db_path)
@@ -39,6 +39,20 @@ def denue_buscar(nombre:str,limite:int=5):
     s=settings_only()
     for h in denue_local.DenueLocalSource(s.denue_local_path).search(nombre,limite):
         print(f"{h['score']:.2f} | {h['company']} | {h['trade_name']} | {h['domain'] or '-'} | {h['email'] or '-'} | {h['location']}")
+@app.command('tukan-update')
+def tukan_update(ruta:str=typer.Argument('',help='Excel o CSV de Tukan; por defecto busca Tukan.xlsx junto al proyecto')):
+    """Precarga Tukan en data/tukan/tukan.sqlite (segunda fuente local)."""
+    s=settings_only();src=ruta or tukan_local.default_source_file()
+    if not src:raise typer.BadParameter('No se encontro Tukan.xlsx; indica la ruta')
+    print(tukan_local.build(src,Path(s.tukan_local_path).parent,lambda n:print(f'{n:,} contactos')))
+@app.command('tukan-buscar')
+def tukan_buscar(consulta:str):
+    """Prueba rapida contra Tukan: NRP exacto o nombre de empresa."""
+    s=settings_only();src=tukan_local.TukanLocalSource(s.tukan_local_path)
+    h=src.by_nrp(consulta) or src.by_company(consulta)
+    if not h:print('Sin coincidencia');return
+    print(f"{h['match']} {h['score']:.2f} | {h['company']} | NRP {h['nrp']} | {h['domain'] or '-'} | {h['email']} ({h['status']})")
+    for e,est in h['emails'][:10]:print(f'   {est:9} {e}')
 @app.command()
 def export(output_dir:str|None=None):s,db=ctx();print(export_all(db,output_dir or s.output_dir))
 if __name__=='__main__':app()

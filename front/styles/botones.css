@@ -1,0 +1,36 @@
+/*
+ * Botones (variantes de components/ui/button.tsx).
+ *
+ * El brillo dorado (`filter: brightness` + `--shadow-glow-brand`) es OPT-IN,
+ * de `button.principal`, no del `button` base. Cuando era del base, cada botón
+ * que no es el CTA —las pastillas de la barra, los ítems de menú, los chips de
+ * la paleta, las pestañas, los pasos, las versiones, el grupo de zoom— tenía
+ * que deshacerlo con `box-shadow: none; filter: none`, y ese par se repetía en
+ * diez reglas: el default estaba al revés. La regla es: el relleno dorado y su
+ * glow los lleva SOLO el botón primario de cada pantalla.
+ */
+
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 36px; padding: 0 14px; font: inherit; font-size: var(--text-sm);
+  font-weight: 600; white-space: nowrap; border-radius: var(--radius-md);
+  border: 1px solid transparent; background: var(--accent); color: var(--text-on-brand);
+  cursor: pointer; user-select: none;
+  transition: background var(--duration-base) var(--easing-out),
+              border-color var(--duration-base) var(--easing-out),
+              box-shadow var(--duration-base) var(--easing-out),
+              filter var(--duration-base) var(--easing-out);
+}
+/* El CTA dorado: es el único que se ilumina al pasar el mouse. */
+button.principal:hover { filter: brightness(1.05); box-shadow: var(--shadow-glow-brand); }
+button:active { filter: brightness(.95); }
+button.secundario {
+  background: transparent; color: var(--text-primary); border-color: var(--border-emphasis);
+}
+button.secundario:hover {
+  background: var(--bg-surface-hover); border-color: var(--accent);
+}
+button.fantasma { background: transparent; color: var(--text-muted); border-color: transparent; }
+button.fantasma:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+button:disabled { pointer-events: none; opacity: .5; }
+button.ancho { width: 100%; }

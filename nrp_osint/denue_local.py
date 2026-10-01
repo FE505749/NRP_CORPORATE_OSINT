@@ -12,13 +12,13 @@ import re
 import sqlite3
 import time
 import zipfile
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
 
 from rapidfuzz import fuzz
 
-from .domain import is_blocked_domain, root_domain
+from .domain import emails_in, is_blocked_domain, mail_domain, root_domain
 from .emailintel import pattern_from_local_part
 from .normalize import clean_text, norm, normalize_company
 from .paths import PROJECT_ROOT
@@ -69,6 +69,7 @@ CREATE TABLE meta(clave TEXT PRIMARY KEY, valor TEXT);
 POST = """
 CREATE INDEX idx_est_raz ON est(raz_norm);
 CREATE INDEX idx_est_nom ON est(nom_norm);
+CREATE INDEX idx_est_domc ON est(dominio_correo);
 CREATE VIRTUAL TABLE fts USING fts5(raz_norm, nom_norm, content='est', content_rowid='id', tokenize='unicode61');
 INSERT INTO fts(fts) VALUES('rebuild');
 ANALYZE;
@@ -247,10 +248,12 @@ class DenueLocalSource:
 
     def __init__(self, path: Path | str | None = None, candidates: int = 300):
         self.path = Path(path) if path else db_path()
+        ensure_indexes(self.path)
         self.conn = sqlite3.connect(f"file:{self.path.as_posix()}?mode=ro", uri=True, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.candidates = candidates
         self._cache: dict[str, list] = {}
+        self._emails: dict[str, set] = {}
 
     @staticmethod
     def available(path: Path | str | None = None) -> bool:
@@ -308,24 +311,81 @@ class DenueLocalSource:
         # Se ignora la entidad: el estado del archivo es el del trabajador, no el del patron.
         return self.search(name, limit)
 
+    def _hosts(self, filas) -> dict[str, set]:
+        """{dominio exacto tras la @: correos}. Solo correos de empresa."""
+        out = defaultdict(set)
+        for (campo,) in filas:
+            for e in emails_in(campo):
+                if _email_domain(e):
+                    out[mail_domain(e)].add(e)
+        out.pop("", None)
+        return out
+
+    def email_domain_votes(self, raz_norm: str) -> dict[str, int]:
+        """Dominios (exactos, lo que va tras la @) de los correos de una razon social.
+        Cuenta correos distintos: el mismo correo en cuatro sucursales vale uno."""
+        if not raz_norm:
+            return {}
+        h = self._hosts(self.conn.execute(
+            "SELECT DISTINCT correoelec FROM est WHERE raz_norm=? AND dominio_correo<>''", (raz_norm,)))
+        return {d: len(s) for d, s in h.items()}
+
+    def brand_email_hosts(self, name: str, max_establecimientos: int = 3000) -> dict[str, set]:
+        """Correos de empresa de TODOS los establecimientos cuyo nombre contiene todas
+        las palabras buscadas: 'BBVA' junta BBVA BANCOMER, GRUPO FINANCIERO BBVA...
+        Un nombre demasiado generico ('SERVICIOS') daria miles de empresas ajenas:
+        en ese caso no se usa."""
+        q = _fts_query(denue_norm(name))
+        if not q:
+            return {}
+        try:
+            n = self.conn.execute("SELECT COUNT(*) FROM fts WHERE fts MATCH ?", (q,)).fetchone()[0]
+            if not n or n > max_establecimientos:
+                return {}
+            filas = self.conn.execute(
+                "SELECT DISTINCT est.correoelec FROM fts JOIN est ON est.id=fts.rowid "
+                "WHERE fts MATCH ? AND est.dominio_correo<>''", (q,)).fetchall()
+        except sqlite3.OperationalError:
+            return {}
+        return dict(self._hosts(filas))
+
+    def domain_emails(self, domain: str) -> set[str]:
+        """Correos de DENUE cuyo dominio es exactamente ese, de cualquier sucursal."""
+        dom = mail_domain(domain)
+        if not dom:
+            return set()
+        if dom not in self._emails:
+            filas = self.conn.execute("SELECT DISTINCT correoelec FROM est WHERE dominio_correo=?",
+                                      (root_domain(dom),))
+            self._emails[dom] = self._hosts(filas).get(dom, set())
+        return self._emails[dom]
+
     def email_pattern_votes(self, raz_norm: str, domain: str) -> tuple[dict, int]:
-        """Patrones que sugieren los correos que la empresa publico en DENUE.
-        Solo cuentan correos del mismo dominio y con forma de persona
-        (nombre.apellido, n.apellido...). Muestra debil: no trae el nombre."""
-        if not raz_norm or not domain:
-            return {}, 0
+        """Patrones que sugieren los correos de ese dominio en DENUE (el formato es
+        del dominio, no del establecimiento). Solo cuentan los que tienen forma de
+        persona; 'ventas@' o 'info@' no. raz_norm queda por compatibilidad."""
         votes = Counter()
-        seen = set()
-        for (email,) in self.conn.execute(
-                "SELECT DISTINCT correoelec FROM est WHERE raz_norm=? AND dominio_correo=?", (raz_norm, domain)):
-            local = email.split("@", 1)[0]
-            if local in seen:
-                continue
-            seen.add(local)
-            pat = pattern_from_local_part(local)
+        for local in {e.split("@", 1)[0] for e in self.domain_emails(domain)}:
+            pat = pattern_from_local_part(local, allow_single=True)
             if pat:
                 votes[pat] += 1
         return dict(votes), sum(votes.values())
+
+
+def ensure_indexes(path: Path | str) -> None:
+    """Bases construidas antes no tenian indice por dominio de correo; sin el,
+    cada consulta recorre 6 millones de filas. Se crea una sola vez."""
+    p = Path(path)
+    if not p.exists():
+        return
+    conn = sqlite3.connect(p)
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_est_domc ON est(dominio_correo)")
+        conn.commit()
+    except sqlite3.Error:
+        pass  # solo lectura o bloqueada: funciona igual, mas lento
+    finally:
+        conn.close()
 
 
 @lru_cache(maxsize=1)

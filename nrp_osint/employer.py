@@ -1,10 +1,11 @@
 import json,re,asyncio
-from collections import defaultdict
+from collections import Counter,defaultdict
 from rapidfuzz import fuzz
 from .normalize import normalize_company,norm
-from .domain import root_domain,normalize_website,domain_company_score,is_blocked_domain,mx_records
-from .emailintel import infer_patterns,weak_pattern_confidence
+from .domain import root_domain,normalize_website,domain_company_score,is_blocked_domain,mx_records,mail_domain
+from .emailintel import infer_patterns,weak_pattern_confidence,pattern_from_local_part,nombres_juntos
 from .search import SearchError
+from .tukan_local import corporate_domain
 
 COMPANY_PATTERNS=[
  re.compile(r'(?:raz[oó]n social|nombre del patr[oó]n|patr[oó]n|empresa|empleador)\s*[:\-]\s*([A-ZÁÉÍÓÚÑ0-9&.,\' -]{4,140})',re.I),
@@ -29,14 +30,14 @@ def company_candidates_from_hit(hit,nrp=''):
     return list(dict.fromkeys(out))
 
 class EmployerResolver:
-    def __init__(self,db,settings,search,crawler,denue,clearbit=None,commoncrawl=None,wikidata=None):
-        self.db=db;self.settings=settings;self.search=search;self.crawler=crawler;self.denue=denue;self.clearbit=clearbit;self.commoncrawl=commoncrawl;self.wikidata=wikidata
+    def __init__(self,db,settings,search,crawler,denue,clearbit=None,commoncrawl=None,wikidata=None,tukan=None):
+        self.db=db;self.settings=settings;self.search=search;self.crawler=crawler;self.denue=denue;self.clearbit=clearbit;self.commoncrawl=commoncrawl;self.wikidata=wikidata;self.tukan=tukan
 
     async def resolve(self,employer):
         key=employer['employer_key'];nrp=employer.get('nrp','') or '';supplied=(employer.get('company_input') or '').strip()
         row=self.db.conn.execute("SELECT entity FROM people WHERE employer_key=? AND entity<>'' LIMIT 1",(key,)).fetchone();entity=row['entity'] if row else ''
         company='';company_conf=0.;domain='';domain_conf=0.;website='';generic_email='';phone='';route=[];conflict=False
-        local_only=bool(getattr(self.settings,'denue_local_only',False));denue_hit=None
+        local_only=bool(getattr(self.settings,'denue_local_only',False));denue_hit=None;tukan_hit=None;tukan_email=tukan_status=''
 
         # A. Local NRP knowledge
         known=self.db.get_nrp(nrp) if nrp else None
@@ -49,8 +50,19 @@ class EmployerResolver:
         if not company and supplied:
             company=supplied;company_conf=.76;route.append('EMPRESA_APORTADA')
 
+        # B2. Tukan por NRP exacto: da la empresa cuando la base no la trae. Si el
+        # nombre no se parece al de la base, el NRP no se usa y se busca por nombre.
+        if self.tukan and nrp and not conflict:
+            try:
+                tukan_hit=self.tukan.by_nrp(nrp,company)
+                if tukan_hit and company and tukan_hit['company'] and tukan_hit['score']<.62:
+                    self.db.add_evidence(key,'CONFLICT','TUKAN_NRP',tukan_hit['url'],f"Tukan={tukan_hit['company']} / entrada={company}",tukan_hit['score']);tukan_hit=None
+                if tukan_hit and not company and tukan_hit['company']:
+                    company=tukan_hit['company'];company_conf=.90;route.append('TUKAN_NRP')
+            except Exception as e:self.db.log_network('TUKAN','ERROR',str(e));tukan_hit=None
+
         # C. NRP-only discovery or NRP verification when knowledge is weak
-        if nrp and not conflict and not local_only and (not known or float(known.get('confidence') or 0)<.90):
+        if nrp and not conflict and not local_only and not tukan_hit and (not known or float(known.get('confidence') or 0)<.90):
             info=await self._search_nrp(nrp,supplied or company)
             if info['company']:
                 found=info['company'];fconf=info['confidence']
@@ -73,6 +85,12 @@ class EmployerResolver:
             except:cached_patterns={}
             cached_pconf=float(profile.get('pattern_confidence') or 0);route.append('COMPANY_PROFILE_LOCAL')
 
+        # El dominio del correo sale de CORREOS reales y es exactamente lo que va
+        # despues de la @ (bancomer.com.mx), nunca del sitio web si hay correos:
+        # Profuturo tiene su web en profuturo.mx y sus correos en profuturo.com.mx.
+        # DENUE y Tukan solo votan aqui; el paso D3 decide.
+        denue_mail=Counter();tukan_mail=Counter();grupo={};web_domain='';buscado=company
+
         # D. DENUE structured source
         if not domain and self.denue:
             try:
@@ -82,9 +100,70 @@ class EmployerResolver:
                     # La copia local ya trae el dominio depurado; para la API se filtra aqui
                     # (un sitio de Facebook no es el dominio de la empresa).
                     cand=b['domain'] if 'domain' in b else root_domain(b['website'])
-                    if cand and not is_blocked_domain(cand):domain=cand;website=normalize_website(b['website']) or 'https://'+cand;domain_conf=.94
-                    src=getattr(self.denue,'name','DENUE');route.append(src);self.db.add_evidence(key,'COMPANY',src,b['url'],f"{b['company']} | {b['trade_name']} | {b['website']} | {b['email']}",b['score'])
+                    if cand and not is_blocked_domain(cand):web_domain=cand;website=normalize_website(b['website']) or 'https://'+cand
+                    # Correos de todas las sucursales de esa razon social.
+                    votes_fn=getattr(self.denue,'email_domain_votes',None)
+                    if votes_fn:denue_mail.update(votes_fn(b.get('raz_norm','')))
+                    elif corporate_domain(b.get('email','')):denue_mail[mail_domain(b['email'])]+=1
+                    # Y de todo el grupo: cualquier establecimiento con el nombre buscado
+                    # ('BBVA' junta BBVA BANCOMER, GRUPO FINANCIERO BBVA...).
+                    grupo_fn=getattr(self.denue,'brand_email_hosts',None)
+                    if grupo_fn:grupo=grupo_fn(buscado)
+                    src=getattr(self.denue,'name','DENUE');route.append(src)
+                    self.db.add_evidence(key,'COMPANY',src,b['url'],f"{b['company']} | {b['trade_name']} | web {b['website'] or '-'}",b['score'])
             except Exception as e:self.db.log_network('DENUE','ERROR',str(e))
+
+        # D2. Tukan, segunda fuente local: el contacto del patron (ACTIVO primero)
+        # y su dominio de correo, que vota junto con DENUE.
+        tukan_correos=defaultdict(set)
+        if self.tukan:
+            try:
+                if not tukan_hit:
+                    tukan_hit=self.tukan.by_company(company)
+                    if tukan_hit and tukan_hit['score']<.85:tukan_hit=None
+                if tukan_hit:
+                    tukan_email,tukan_status=tukan_hit['email'],tukan_hit['status'];td=tukan_hit['domain']
+                    route.append('TUKAN_NRP' if tukan_hit['match']=='NRP' else 'TUKAN_NOMBRE')
+                    # Solo el dominio que Tukan eligio (el de un contacto ACTIVO si lo hay); un correo activo vale doble.
+                    for e,st in tukan_hit['emails']:
+                        if td and corporate_domain(e)==td:
+                            tukan_mail[mail_domain(e)]+=2 if st=='ACTIVO' else 1;tukan_correos[mail_domain(e)].add(e)
+                    detalle=f"{tukan_hit['company']} | NRP {tukan_hit['nrp']} | {tukan_email} ({tukan_status}) | dominio {td or '-'}"
+                    if tukan_hit['shared_domain']:detalle+=f" | dominio de tercero {tukan_hit['shared_domain']}"
+                    self.db.add_evidence(key,'COMPANY','TUKAN_LOCAL',tukan_hit['url'],detalle,tukan_hit['score'])
+            except Exception as e:self.db.log_network('TUKAN','ERROR',str(e))
+
+        # D3. Dominio del correo por votos de correos reales. El sitio web solo entra
+        # si ninguna fuente tiene un correo de empresa.
+        if not domain:
+            denue_votos={h:max(denue_mail.get(h,0),len(grupo.get(h,()))) for h in set(denue_mail)|set(grupo)}
+            mail=Counter(denue_votos)+tukan_mail
+            def valido(h):
+                # Del grupo amplio solo cuenta un dominio que se parezca a la empresa;
+                # de la razon social o de Tukan basta con dos correos.
+                return domain_company_score(h,company)>=.5 or ((h in denue_mail or h in tukan_mail) and mail[h]>=2)
+            cands=[h for h in mail if valido(h)]
+            if cands:
+                best=max(cands,key=lambda h:(mail[h],domain_company_score(h,company)))
+                ambos=best in denue_votos and best in tukan_mail
+                domain=best;domain_conf=min(.97,.82+.03*mail[best]+(.05 if ambos else 0))
+                if best in denue_votos:route.append('DOMINIO_CORREOS_DENUE')
+                if best in tukan_mail:route.append('DOMINIO_CORREOS_TUKAN')
+                if ambos:route.append('TUKAN_CONFIRMA_DOMINIO')
+                if not website:website='https://'+(web_domain or best)
+                ejemplos=sorted(grupo.get(best,set())|tukan_correos.get(best,set()))
+                if not ejemplos and hasattr(self.denue,'domain_emails'):ejemplos=sorted(self.denue.domain_emails(best))
+                self.db.add_evidence(key,'DOMAIN','CORREOS',f'mailto:@{best}',f"Dominio {best}: {mail[best]} correos (DENUE {denue_votos.get(best,0)}, Tukan {tukan_mail[best]}) | ej. {', '.join(ejemplos[:6]) or '-'} | web {web_domain or '-'}",domain_conf)
+            if not domain and web_domain:
+                # Sin correos de la empresa: el sitio web, confirmado si hay correos con ese dominio exacto.
+                confirman=set()
+                if hasattr(self.denue,'domain_emails'):confirman|=self.denue.domain_emails(web_domain)
+                if self.tukan:confirman|=self.tukan.emails_for_domain(web_domain)
+                domain=web_domain
+                if confirman:
+                    domain_conf=.92;route.append('DOMINIO_SITIO_WEB_CONFIRMADO')
+                    self.db.add_evidence(key,'DOMAIN','CORREOS',f'mailto:@{web_domain}',f"Dominio {web_domain} (sitio web) confirmado por {len(confirman)} correos | ej. {', '.join(sorted(confirman)[:6])}",domain_conf)
+                else:domain_conf=.85;route.append('DOMINIO_SITIO_WEB')
 
         # E. Clearbit autocomplete - auxiliary only, requires independent validation
         if not domain and self.clearbit and not local_only:
@@ -123,7 +202,7 @@ class EmployerResolver:
         if domain and cached_patterns and cached_pconf>=self.settings.pattern_accept:
             patterns,pconf=cached_patterns,cached_pconf;mx=bool(cached_mx) if cached_mx is not None else mx
         elif domain and local_only:
-            patterns,pconf=self._denue_patterns(denue_hit,domain)
+            patterns,pconf=self._local_patterns(denue_hit,domain,route,key)
         elif domain:
             pages=await self._company_pages(website or 'https://'+domain,domain)
             for page in pages:
@@ -135,24 +214,43 @@ class EmployerResolver:
                     if not generic_email and email.split('@')[0] in {'info','contact','contacto','ventas','administracion','hello'}:generic_email=email
                 if not phone and page.get('phones'):phone=page['phones'][0]
             patterns,pconf=infer_patterns(self.db.email_samples(key))
-            if not patterns:patterns,pconf=self._denue_patterns(denue_hit,domain)
+            if not patterns:patterns,pconf=self._local_patterns(denue_hit,domain,route,key)
         else:patterns={};pconf=0.
-        if patterns and pconf and 'DENUE_PATRON' not in route and pconf<self.settings.pattern_accept and denue_hit:route.append('DENUE_PATRON')
 
         if company and domain:status='RESUELTO'
-        elif local_only:status='SIN_DOMINIO_DENUE' if denue_hit else 'SIN_COINCIDENCIA_DENUE'
+        elif local_only:status='SIN_DOMINIO_DENUE' if denue_hit else ('SIN_DOMINIO_TUKAN' if tukan_hit else 'SIN_COINCIDENCIA_DENUE')
         else:status='EMPRESA_SIN_DOMINIO'
-        self.db.update_employer(key,company_canonical=company,company_norm=cn,company_confidence=company_conf,domain=domain,website=website,domain_confidence=domain_conf,generic_email=generic_email,phone=phone,mx_valid=None if mx is None else int(bool(mx)),email_patterns_json=json.dumps(patterns,ensure_ascii=False),pattern_confidence=pconf,match_route='|'.join(dict.fromkeys(route)),source_summary='|'.join(dict.fromkeys(route)),status=status)
+        self.db.update_employer(key,company_canonical=company,company_norm=cn,company_confidence=company_conf,domain=domain,website=website,domain_confidence=domain_conf,generic_email=generic_email,phone=phone,mx_valid=None if mx is None else int(bool(mx)),email_patterns_json=json.dumps(patterns,ensure_ascii=False),pattern_confidence=pconf,match_route='|'.join(dict.fromkeys(route)),source_summary='|'.join(dict.fromkeys(route)),status=status,tukan_email=tukan_email,tukan_status=tukan_status)
         self.db.upsert_company_profile(cn,company,domain=domain,website=website,domain_confidence=domain_conf,generic_email=generic_email,phone=phone,mx_valid=None if mx is None else int(bool(mx)),email_patterns_json=json.dumps(patterns,ensure_ascii=False),pattern_confidence=pconf,source_kind='|'.join(dict.fromkeys(route)))
         if nrp and company and company_conf>=.80:self.db.upsert_nrp(nrp,company,cn,domain,company_conf,source_kind='PIPELINE')
         return self.db.get_employer(key)
 
-    def _denue_patterns(self,hit,domain):
-        """Patron debil a partir de los correos que la empresa registro en DENUE."""
-        votes_fn=getattr(self.denue,'email_pattern_votes',None)
-        if not hit or not votes_fn:return {},0.
-        votes,_=votes_fn(hit.get('raz_norm',''),domain)
-        return (votes,weak_pattern_confidence(votes)) if votes else ({},0.)
+    def _local_patterns(self,denue_hit,domain,route,key=None):
+        """Formato del correo a partir de correos reales del dominio exacto, sin
+        nombre: los de DENUE (de cualquier sucursal) y los de Tukan se suman.
+        Detecta si la empresa escribe todos los nombres juntos (victorhugo.olivares)."""
+        fuentes={}
+        if domain and hasattr(self.denue,'domain_emails'):fuentes['DENUE']=self.denue.domain_emails(domain)
+        if domain and self.tukan:fuentes['TUKAN']=self.tukan.emails_for_domain(domain)
+        votes=Counter();ejemplos=defaultdict(list);usaron=set()
+        for e in sorted(set().union(*fuentes.values()) if fuentes else ()):
+            pat=pattern_from_local_part(e.split('@',1)[0],allow_single=True)
+            if pat:
+                votes[pat]+=1;ejemplos[pat].append(e)
+                usaron|={f for f,s in fuentes.items() if e in s}
+        if not votes:return {},0.
+        votes=nombres_juntos(votes)
+        if 'DENUE' in usaron:route.append('DENUE_PATRON')
+        if 'TUKAN' in usaron:route.append('TUKAN_PATRON')
+        if 'given.paternal' in votes:
+            # Primero los ejemplos con dos nombres juntos: son la prueba de la regla.
+            route.append('FORMATO_NOMBRES_JUNTOS');ejemplos['given.paternal']=ejemplos.pop('given.paternal',[])+ejemplos.pop('first.paternal',[])
+        elif 'first.paternal' in votes:ejemplos['first.paternal']+=ejemplos.pop('given.paternal',[])
+        conf=weak_pattern_confidence(votes,cap=.70 if 'TUKAN' in usaron else .66)
+        if key:
+            detalle=' | '.join(f"{p} ({votes[p]}): {', '.join(ejemplos[p][:5])}" for p in sorted(votes,key=lambda p:-votes[p]))
+            self.db.add_evidence(key,'PATTERN','FORMATO',f'mailto:@{domain}',detalle,conf)
+        return dict(votes),conf
 
     async def _search_nrp(self,nrp,supplied=''):
         queries=[f'"{nrp}"',f'"{nrp}" "razón social"',f'"{nrp}" empresa patrón empleador',f'"{nrp}" site:gob.mx'];votes=defaultdict(float);orig={};evidence=[]

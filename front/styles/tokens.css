@@ -1,0 +1,163 @@
+/*
+ * Ania Profuturo — design tokens
+ *
+ * COPIA de CarbotNexus-Backend/front/styles/tokens.css. Si allá cambia la
+ * paleta, hay que sincronizar este archivo a mano: no hay build ni paquete
+ * compartido entre los dos proyectos.
+ *
+ * Regla del sistema: los componentes consumen SOLO los alias semánticos
+ * (--bg-*, --text-*, --border-*, --accent*), nunca las escalas crudas
+ * (--ink-*, --brand-*). Ver app.css.
+ */
+:root {
+  /* Neutrals — familia navy Profuturo (oscuro a claro) */
+  --ink-950: #04203F; --ink-900: #052747; --ink-850: #073056; --ink-800: #0C3A66;
+  --ink-700: #114270; --ink-600: #14467E; --ink-500: #2D5C90; --ink-400: #5E769A;
+  --ink-300: #8FA6C2; --ink-200: #C5D6EA; --ink-100: #E5EEF8; --ink-50: #FFFFFF;
+
+  /* Brand — dorado Profuturo */
+  --brand-300: #FFD54F; --brand-400: #FFCE33; --brand-500: #FFC000;
+  --brand-600: #E6AD00; --brand-700: #B38600;
+
+  /* Azul Profuturo — secundario */
+  --blue-400: #4F88BB; --blue-500: #386CB8; --blue-600: #004B8D; --blue-700: #00366A;
+
+  /* Semantic raw */
+  --success: #46C28E; --success-soft: rgba(70, 194, 142, 0.14);
+  --danger:  #FF6B6B; --danger-soft:  rgba(255, 107, 107, 0.14);
+  --warning: #FFC000; --info: #6FB0E6;
+
+  /* ---- Semantic aliases (API pública) — TEMA OSCURO ---- */
+  --bg-canvas:        #04203F;
+  --bg-app:           #04203F;
+  --bg-surface:       #0C3A66;
+  --bg-surface-hover: #14467E;
+  --bg-input:         #0C3A66;
+  --border-default:   rgba(255, 255, 255, 0.10);
+  --border-emphasis:  rgba(120, 170, 220, 0.22);
+  --text-primary:     #E5EEF8;
+  --text-strong:      #FFFFFF;
+  --text-secondary:   #C5D6EA;
+  --text-muted:       #8FA6C2;
+  --text-subtle:      #5E769A;
+  --text-on-brand:    #04203F;
+  --accent:           var(--brand-500);
+  --accent-soft:      rgba(255, 192, 0, 0.12);
+  --accent-glow:      rgba(255, 192, 0, 0.28);
+  --ring-focus:       var(--brand-500);
+
+  /* Sidebar/topbar: azul + texto claro en AMBOS temas */
+  --bg-sidebar:          #073056;
+  --bg-sidebar-hover:    rgba(255, 255, 255, 0.06);
+  --bg-sidebar-active:   rgba(255, 192, 0, 0.12);
+  --text-sidebar:        #FFFFFF;
+  --text-sidebar-muted:  #C5D6EA;
+  --text-sidebar-subtle: #8FA6C2;
+  --border-sidebar:      rgba(255, 255, 255, 0.10);
+
+  /* Typography — Mulish (marca) + IBM Plex Mono (código) */
+  --font-sans: "Mulish", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+
+  --text-xs: 11px; --text-sm: 13px; --text-base: 14px; --text-md: 16px;
+  --text-lg: 20px; --text-xl: 24px; --text-2xl: 32px;
+
+  --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px;
+  --radius-xl: 12px; --radius-2xl: 14px; --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-glow-brand: 0 6px 18px rgba(255, 192, 0, 0.28);
+
+  --easing-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms; --duration-base: 200ms; --duration-slow: 320ms;
+}
+
+/* ============================================================
+   TEMA CLARO — misma paleta Profuturo, superficies blancas.
+   ============================================================ */
+[data-theme="light"] {
+  --bg-canvas:        #FFFFFF;
+  --bg-app:           #FFFFFF;
+  --bg-surface:       #E9F2FC;
+  --bg-surface-hover: #CFE2F5;
+  --bg-input:         #CFE2F5;
+  --border-default:   rgba(0, 75, 141, 0.12);
+  --border-emphasis:  rgba(0, 75, 141, 0.22);
+  --text-primary:     #0E2440;
+  --text-strong:      #0E2440;
+  --text-secondary:   #36506E;
+  --text-muted:       #6B7E96;
+  --text-subtle:      #6B7E96;
+  --text-on-brand:    #04203F;
+  --accent-soft:      rgba(255, 192, 0, 0.16);
+
+  --bg-sidebar:          #004B8D;
+  --bg-sidebar-hover:    rgba(255, 255, 255, 0.10);
+  --bg-sidebar-active:   rgba(255, 192, 0, 0.18);
+  --text-sidebar:        #FFFFFF;
+  --text-sidebar-muted:  #D7E6F6;
+  --text-sidebar-subtle: #A9C9EC;
+  --border-sidebar:      rgba(255, 255, 255, 0.14);
+
+  --shadow-sm: 0 1px 2px rgba(13, 42, 72, 0.08);
+  --shadow-md: 0 8px 24px rgba(13, 42, 72, 0.10);
+  --shadow-glow-brand: 0 6px 18px rgba(255, 192, 0, 0.35);
+}
+
+/* ----------------------------------------------------------------------------
+ * EXTENSIÓN LOCAL — no está en el tokens.css de ANI.
+ *
+ * Color de TEXTO para los estados: --danger #FF6B6B da 2.8:1 sobre el canvas
+ * blanco del tema claro y --success #46C28E da 2.2:1, los dos por debajo del
+ * mínimo legible. En oscuro sí cumplen, así que el valor solo se re-define en
+ * el tema claro. El color de relleno y de borde sigue siendo el de ANI.
+ *
+ * --accent-text: el mismo problema, con el dorado. En ANI el eyebrow y demás
+ * rótulos en --accent (#FFC000) dan 1.6:1 sobre las superficies claras —
+ * ilegible, es un defecto del propio ANI. Todo TEXTO dorado usa este alias:
+ * en oscuro es el --accent de siempre; en claro, un dorado oscurecido que da
+ * 5.2:1 sobre blanco y 4.6:1 sobre --bg-surface. Rellenos, bordes y el CTA
+ * primario siguen con --accent: la desviación es solo tipográfica.
+ * -------------------------------------------------------------------------- */
+:root {
+  --danger-text:  var(--danger);
+  --success-text: var(--success);
+  --accent-text:  var(--accent);
+  --link:         var(--brand-400);
+
+  /* Papel del diagrama: el lienzo del preview y el chip de la marca son HOJA,
+     no superficie de la UI. Es blanco en los dos temas a proposito — el .vsdx
+     que se exporta tiene fondo blanco, y el preview debe predecirlo. */
+  --papel: #FFFFFF;
+  /* Tinta sobre el papel: el texto del editor in situ imita el del diagrama. */
+  --tinta-papel: #1C1C1C;
+
+  /* La cuadrícula del lienzo: una línea que se ve pero no compite con el
+     dibujo. Sobre el navy del fondo, no sobre el papel. */
+  --linea-rejilla: rgba(143, 166, 194, 0.20);
+
+  /* La cuadrícula que va SOBRE el papel: la hoja es blanca en los dos temas
+     (es --papel), así que estas líneas no dependen del tema. Azul Profuturo
+     translúcido; la mayor marca cada quinto paso. */
+  --rejilla-menor: rgba(0, 75, 141, 0.10);
+  --rejilla-mayor: rgba(0, 75, 141, 0.22);
+
+  /* Realces sobre el azul de la barra. No hay token de ANI para esto: la barra
+     es azul en ambos temas, asi que se aclara/oscurece con blanco y negro
+     translucidos en vez de con un color de superficie. */
+  --bg-sidebar-realce:  rgba(255, 255, 255, 0.14);
+  --bg-sidebar-hundido: rgba(0, 0, 0, 0.20);
+
+  /* El velo que bloquea el lienzo mientras la IA aplica un cambio: atenúa sin
+     tapar — el diagrama se sigue viendo detrás. */
+  --velo-bloqueo: rgba(4, 32, 63, 0.35);
+}
+[data-theme="light"] {
+  --linea-rejilla: rgba(0, 75, 141, 0.13);
+  --danger-text:  #B3261E;
+  --success-text: #0F6E4A;
+  --accent-text:  #8A6700;
+  --link:         var(--blue-600);
+  --velo-bloqueo: rgba(233, 242, 252, 0.55);
+}

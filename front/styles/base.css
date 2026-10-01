@@ -1,0 +1,32 @@
+/*
+ * Base: reset, esquema de color, tipografía y foco.
+ * Igual que skill-diagramas-visio/front/styles/base.css; aquí la página
+ * scrollea dentro de `.contenido`, no el body.
+ *
+ * Los valores vienen de tokens.css: acá NO se escriben colores literales.
+ */
+
+* { box-sizing: border-box; }
+html, body {
+  background: var(--bg-canvas); color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 0, "ss01" 1;
+}
+:root { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
+
+body {
+  margin: 0; font-size: var(--text-base); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+}
+code, .mono { font-family: var(--font-mono); }
+a { color: var(--link); }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+[hidden] { display: none !important; }
+
+:where(button, a, select, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  border-color: var(--ring-focus);
+}

@@ -1,0 +1,43 @@
+/*
+ * Estados, errores, avisos y el spinner.
+ */
+
+.estado { font-size: 12px; color: var(--text-muted); display: none; }
+.estado.visible { display: block; }
+
+.caja-error {
+  display: none; border: 1px solid var(--border-default); border-left: 3px solid var(--danger);
+  background: var(--danger-soft); color: var(--danger-text);
+  border-radius: var(--radius-md); padding: 10px 12px; font-size: 12px;
+}
+.caja-error.visible { display: block; }
+.caja-error ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* El dorado sólido queda reservado para el CTA primario: si el aviso usara el
+   mismo relleno que el botón «Generar», dejaría de leerse como advertencia.
+   Por eso la caja va en superficie neutra, no en amarillo llamativo. */
+.caja-aviso {
+  display: none; border: 1px solid var(--border-default); border-left: 3px solid transparent;
+  background: var(--bg-surface); color: var(--text-primary);
+  border-radius: var(--radius-md); padding: 10px 12px; font-size: 12px;
+}
+.caja-aviso.visible { display: block; }
+.caja-aviso ul { margin: 6px 0 0; padding-left: 18px; max-height: 190px; overflow-y: auto; }
+.caja-aviso b { color: var(--text-strong); }
+/* Con varios avisos la caja se colapsa a un renglón (panel.ts): abierta,
+   empujaba las propiedades de la figura fuera de la vista. El summary escapa
+   del estilo global de «Avanzado», que es para rótulos, no para avisos. */
+.caja-aviso summary {
+  cursor: pointer; font-size: 12px; font-weight: 400;
+  text-transform: none; letter-spacing: 0; color: var(--text-primary);
+}
+.caja-aviso summary::marker { color: var(--warning); }
+.caja-aviso details[open] summary { margin-bottom: 4px; }
+
+.spinner {
+  display: inline-block; width: 11px; height: 11px; margin-right: 6px;
+  border: 2px solid var(--border-emphasis); border-top-color: var(--accent);
+  border-radius: 50%; animation: girar .8s linear infinite; vertical-align: -1px;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
